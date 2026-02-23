@@ -82,9 +82,9 @@ GhostRecon is a military-grade secure messaging application designed for privacy
 - iOS permissions with App Store-compliant descriptions
 - Push notification channels configured
 
-### Requires Production Setup
-- Apple Developer account + bundle ID setup
-- Google Play Console + keystore
-- Production MongoDB Atlas
-- Production backend hosting (Railway/Render/AWS)
-- Replace EAS submit placeholder credentials
+### v3.0 Changes
+- Real E2E encryption using X25519 + NaCl (tweetnacl library)
+- Biometric lock (Face ID / Touch ID) via expo-local-authentication
+- WebRTC call signaling server (accept/reject/ICE candidates via WebSocket)
+- Public key exchange endpoints for contact verification
+- E2E key fingerprint display in Settings and Security Dashboard
