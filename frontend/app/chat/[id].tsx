@@ -198,6 +198,9 @@ export default function ChatDetail() {
         />
 
         <View style={styles.timerRow}>
+          {typing && (
+            <Text style={styles.typingIndicator}>Agent is typing...</Text>
+          )}
           <Clock size={14} color={COLORS.muted_text} />
           <Text style={styles.timerRowLabel}>SELF-DESTRUCT:</Text>
           {timerOptions.map((t) => (
