@@ -2,21 +2,42 @@
   "expo": {
     "name": "GhostRecon",
     "slug": "ghostrecon",
-    "version": "1.0.0",
+    "version": "2.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "ghostrecon",
     "userInterfaceStyle": "dark",
     "newArchEnabled": true,
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "com.ghostrecon.app",
+      "infoPlist": {
+        "NSCameraUsageDescription": "Make encrypted video calls",
+        "NSMicrophoneUsageDescription": "Make encrypted voice calls",
+        "NSContactsUsageDescription": "Find contacts in your network",
+        "NSFaceIDUsageDescription": "Unlock app with biometrics",
+        "UIBackgroundModes": ["remote-notification"]
+      },
+      "config": {
+        "usesNonExemptEncryption": true
+      }
     },
     "android": {
+      "package": "com.ghostrecon.app",
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/adaptive-icon.png",
-        "backgroundColor": "#000"
+        "backgroundColor": "#050505"
       },
-      "edgeToEdgeEnabled": true
+      "edgeToEdgeEnabled": true,
+      "permissions": [
+        "CAMERA",
+        "RECORD_AUDIO",
+        "READ_CONTACTS",
+        "VIBRATE",
+        "RECEIVE_BOOT_COMPLETED",
+        "USE_BIOMETRIC",
+        "USE_FINGERPRINT"
+      ]
     },
     "web": {
       "bundler": "metro",
@@ -31,12 +52,24 @@
           "image": "./assets/images/splash-icon.png",
           "imageWidth": 200,
           "resizeMode": "contain",
-          "backgroundColor": "#000"
+          "backgroundColor": "#050505"
+        }
+      ],
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/images/icon.png",
+          "color": "#00FF41"
         }
       ]
     ],
     "experiments": {
       "typedRoutes": true
+    },
+    "extra": {
+      "eas": {
+        "projectId": "ghostrecon"
+      }
     }
   }
 }
