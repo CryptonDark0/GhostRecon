@@ -630,7 +630,9 @@ class ConnectionManager:
             self.active_connections[user_id].discard(websocket)
             if not self.active_connections[user_id]:
                 del self.active_connections[user_id]
-                asyncio.create_task(db.users.update_one({"id": user_id}, {"$set": {"is_online": False, "last_seen": datetime.now(timezone.utc).isoformat()}}))
+                # Schedule DB update in background without awaiting
+                loop = asyncio.get_event_loop()
+                loop.create_task(db.users.update_one({"id": user_id}, {"$set": {"is_online": False, "last_seen": datetime.now(timezone.utc).isoformat()}}))
 
     async def send_to_user(self, user_id: str, data: dict):
         if user_id in self.active_connections:
