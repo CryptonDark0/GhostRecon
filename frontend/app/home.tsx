@@ -229,6 +229,15 @@ export default function HomeScreen() {
       </TouchableOpacity>
 
       <TouchableOpacity
+        testID="profile-photo-btn"
+        style={styles.settingsBtn}
+        activeOpacity={0.7}
+        onPress={() => router.push('/profile-photo')}
+      >
+        <Text style={styles.settingsBtnText}>DISAPPEARING PROFILE PHOTO</Text>
+      </TouchableOpacity>
+
+      <TouchableOpacity
         testID="logout-btn"
         style={styles.logoutBtn}
         activeOpacity={0.7}
