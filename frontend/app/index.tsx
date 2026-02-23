@@ -19,7 +19,13 @@ export default function OnboardingScreen() {
   const checkAuth = async () => {
     const token = await getToken();
     if (token) {
-      router.replace('/home');
+      // Check if biometric lock is enabled
+      const bioEnabled = await AsyncStorage.getItem('ghostrecon_biometric_enabled');
+      if (bioEnabled === 'true') {
+        router.replace('/biometric-lock');
+      } else {
+        router.replace('/home');
+      }
     }
   };
 
