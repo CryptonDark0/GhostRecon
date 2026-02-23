@@ -3,12 +3,18 @@ import {
   View, Text, StyleSheet, TouchableOpacity, SafeAreaView, ScrollView, Switch, Alert,
 } from 'react-native';
 import { useRouter } from 'expo-router';
-import { ChevronLeft, Shield, Eye, EyeOff, Clock, Link, Keyboard } from 'lucide-react-native';
+import { ChevronLeft, Shield, Eye, EyeOff, Clock, Link, Keyboard, Fingerprint } from 'lucide-react-native';
 import { COLORS } from '../src/constants';
 import { apiCall } from '../src/api';
+import * as LocalAuthentication from 'expo-local-authentication';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { getKeyFingerprint, getOrCreateKeyPair } from '../src/encryption';
 
 export default function SettingsScreen() {
   const router = useRouter();
+  const [biometricAvailable, setBiometricAvailable] = useState(false);
+  const [biometricEnabled, setBiometricEnabled] = useState(false);
+  const [keyFingerprint, setKeyFingerprint] = useState('');
   const [settings, setSettings] = useState({
     screenshot_protection: true,
     read_receipts: false,
