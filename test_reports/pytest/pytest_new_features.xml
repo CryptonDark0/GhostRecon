@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="9" failures="0" skipped="0" tests="9" time="0.488" timestamp="2026-02-23T11:15:02.168411+00:00" hostname="agent-env-6f752a5e-fd15-498d-ac7c-218a02135c48"><testcase classname="tests.test_new_features.TestPublicKeyExchange" name="test_publish_public_key" time="0.002"><error message="failed on setup with &quot;Failed: EXPO_PUBLIC_BACKEND_URL not set in environment&quot;">tests/conftest.py:17: in base_url
+    pytest.fail("EXPO_PUBLIC_BACKEND_URL not set in environment")
+E   Failed: EXPO_PUBLIC_BACKEND_URL not set in environment</error></testcase><testcase classname="tests.test_new_features.TestPublicKeyExchange" name="test_get_public_key" time="0.001"><error message="failed on setup with &quot;Failed: EXPO_PUBLIC_BACKEND_URL not set in environment&quot;">tests/conftest.py:17: in base_url
+    pytest.fail("EXPO_PUBLIC_BACKEND_URL not set in environment")
+E   Failed: EXPO_PUBLIC_BACKEND_URL not set in environment</error></testcase><testcase classname="tests.test_new_features.TestPublicKeyExchange" name="test_get_public_key_not_found" time="0.000"><error message="failed on setup with &quot;Failed: EXPO_PUBLIC_BACKEND_URL not set in environment&quot;">tests/conftest.py:17: in base_url
+    pytest.fail("EXPO_PUBLIC_BACKEND_URL not set in environment")
+E   Failed: EXPO_PUBLIC_BACKEND_URL not set in environment</error></testcase><testcase classname="tests.test_new_features.TestSessionInfo" name="test_session_info_includes_public_key" time="0.001"><error message="failed on setup with &quot;Failed: EXPO_PUBLIC_BACKEND_URL not set in environment&quot;">tests/conftest.py:17: in base_url
+    pytest.fail("EXPO_PUBLIC_BACKEND_URL not set in environment")
+E   Failed: EXPO_PUBLIC_BACKEND_URL not set in environment</error></testcase><testcase classname="tests.test_new_features.TestCallSignaling" name="test_call_signal_offer" time="0.000"><error message="failed on setup with &quot;Failed: EXPO_PUBLIC_BACKEND_URL not set in environment&quot;">tests/conftest.py:17: in base_url
+    pytest.fail("EXPO_PUBLIC_BACKEND_URL not set in environment")
+E   Failed: EXPO_PUBLIC_BACKEND_URL not set in environment</error></testcase><testcase classname="tests.test_new_features.TestCallSignaling" name="test_call_signal_ice_candidate" time="0.000"><error message="failed on setup with &quot;Failed: EXPO_PUBLIC_BACKEND_URL not set in environment&quot;">tests/conftest.py:17: in base_url
+    pytest.fail("EXPO_PUBLIC_BACKEND_URL not set in environment")
+E   Failed: EXPO_PUBLIC_BACKEND_URL not set in environment</error></testcase><testcase classname="tests.test_new_features.TestCallSignaling" name="test_accept_call" time="0.000"><error message="failed on setup with &quot;Failed: EXPO_PUBLIC_BACKEND_URL not set in environment&quot;">tests/conftest.py:17: in base_url
+    pytest.fail("EXPO_PUBLIC_BACKEND_URL not set in environment")
+E   Failed: EXPO_PUBLIC_BACKEND_URL not set in environment</error></testcase><testcase classname="tests.test_new_features.TestCallSignaling" name="test_reject_call" time="0.000"><error message="failed on setup with &quot;Failed: EXPO_PUBLIC_BACKEND_URL not set in environment&quot;">tests/conftest.py:17: in base_url
+    pytest.fail("EXPO_PUBLIC_BACKEND_URL not set in environment")
+E   Failed: EXPO_PUBLIC_BACKEND_URL not set in environment</error></testcase><testcase classname="tests.test_new_features.TestCallSignaling" name="test_call_signal_invalid_call_id" time="0.000"><error message="failed on setup with &quot;Failed: EXPO_PUBLIC_BACKEND_URL not set in environment&quot;">tests/conftest.py:17: in base_url
+    pytest.fail("EXPO_PUBLIC_BACKEND_URL not set in environment")
+E   Failed: EXPO_PUBLIC_BACKEND_URL not set in environment</error></testcase></testsuite></testsuites>
