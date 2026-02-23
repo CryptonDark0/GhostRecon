@@ -75,6 +75,7 @@ export default function HomeScreen() {
   }, []);
 
   const handleLogout = async () => {
+    disconnectWebSocket();
     await clearAuth();
     router.replace('/');
   };
