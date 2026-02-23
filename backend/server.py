@@ -408,6 +408,14 @@ async def send_message(data: MessageCreate, user=Depends(get_current_user)):
             "last_message_at": now.isoformat()
         }}
     )
+
+    # Broadcast via WebSocket
+    await ws_manager.broadcast_to_conversation(
+        data.conversation_id,
+        {"type": "new_message", "message": message},
+        exclude_user=user["id"]
+    )
+
     return message
 
 @api_router.get("/messages/{conv_id}")
