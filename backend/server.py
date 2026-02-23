@@ -711,12 +711,14 @@ class ConnectionManager:
             self.active_connections[user_id].discard(websocket)
             if not self.active_connections[user_id]:
                 del self.active_connections[user_id]
-                # Schedule DB update in background - create async task
-                async def update_user_status():
-                    await db.users.update_one({"id": user_id}, {"$set": {"is_online": False, "last_seen": datetime.now(timezone.utc).isoformat()}})
+                # Schedule DB update in background
                 try:
-                    loop = asyncio.get_event_loop()
-                    loop.create_task(update_user_status())
+                    asyncio.create_task(
+                        db.users.update_one(
+                            {"id": user_id}, 
+                            {"$set": {"is_online": False, "last_seen": datetime.now(timezone.utc).isoformat()}}
+                        )
+                    )
                 except Exception:
                     pass  # Ignore errors in background task
 
