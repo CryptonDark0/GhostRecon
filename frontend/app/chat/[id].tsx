@@ -284,6 +284,7 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.gunmetal,
   },
   timerRowLabel: { color: COLORS.muted_text, fontSize: 9, fontFamily: 'monospace', letterSpacing: 1 },
+  typingIndicator: { color: COLORS.terminal_green, fontSize: 10, fontFamily: 'monospace', fontStyle: 'italic' },
   timerOption: {
     paddingHorizontal: 10, paddingVertical: 4,
     borderWidth: 1, borderColor: COLORS.border_subtle, borderRadius: 2,
