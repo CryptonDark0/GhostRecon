@@ -777,8 +777,9 @@ async def view_profile_photo(user_id: str, user=Depends(get_current_user)):
             raise HTTPException(status_code=404, detail="Photo expired")
 
     # Track view
+    current_view_count = photo.get("view_count", 0)
     if user["id"] != user_id and user["id"] not in photo.get("viewers", []):
-        new_count = photo.get("view_count", 0) + 1
+        new_count = current_view_count + 1
         update = {
             "$inc": {"view_count": 1},
             "$push": {"viewers": user["id"]}
@@ -789,10 +790,11 @@ async def view_profile_photo(user_id: str, user=Depends(get_current_user)):
             await db.users.update_one({"id": user_id}, {"$set": {"has_disappearing_photo": False}})
 
         await db.profile_photos.update_one({"id": photo["id"]}, update)
+        current_view_count = new_count
 
     return {
         "photo_data": photo["photo_data"],
-        "view_count": photo.get("view_count", 0),
+        "view_count": current_view_count,
         "max_views": photo.get("disappear_after_views", 1),
         "expires_at": photo.get("expires_at"),
         "created_at": photo.get("created_at")
