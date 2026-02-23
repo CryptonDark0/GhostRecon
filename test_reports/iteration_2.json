@@ -55,8 +55,8 @@
     "✅ Backend auto-reload working correctly after code changes"
   ],
   "updated_files": [
-    "/app/backend/server.py - FIXED WebSocket disconnect bug line 633",
-    "/app/backend/tests/test_websocket_notifications.py - NEW comprehensive test suite for WebSocket and push notifications"
+    "/app/backend/server.py - FIXED WebSocket disconnect bug lines 628-641 (wrapped update_one in async function)",
+    "/app/backend/tests/test_websocket_notifications.py - NEW comprehensive test suite for WebSocket and push notifications (10 tests)"
   ],
   "success_rate": {
     "backend": "90% (36/40 total tests passed), 100% (10/10 NEW feature tests passed)",
