@@ -37,3 +37,9 @@ Android build failing on EAS due to corrupted/invalid gradle-wrapper.jar file.
 ### Deployment Readiness:
 - All services running
 - Gradle files valid for EAS build
+
+## Gradle Update v2 (Feb 2026)
+- Updated all Gradle wrapper files to version 8.11.1
+- Downloaded fresh JAR (43KB), gradlew (8.7KB), gradlew.bat (2.9KB)
+- Added .gitattributes to prevent binary file corruption
+- Compatible with Expo SDK 54 + React Native 0.81.5
