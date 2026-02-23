@@ -19,13 +19,29 @@ export default function ChatDetail() {
   const [conversation, setConversation] = useState<any>(null);
   const [selfDestruct, setSelfDestruct] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
+  const [typing, setTyping] = useState(false);
   const flatListRef = useRef<FlatList>(null);
-  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // WebSocket for real-time messages
+  const onWsMessage = useCallback((msg: any) => {
+    if (msg.type === 'new_message' && msg.message?.conversation_id === id) {
+      setMessages(prev => [...prev, msg.message]);
+      sendLocalNotification(
+        `${msg.message.sender_alias}`,
+        msg.message.content,
+        { conversationId: id }
+      );
+    }
+    if (msg.type === 'typing' && msg.conversation_id === id) {
+      setTyping(true);
+      setTimeout(() => setTyping(false), 3000);
+    }
+  }, [id]);
+
+  useWebSocket(onWsMessage);
 
   useEffect(() => {
     loadChat();
-    pollRef.current = setInterval(loadMessages, 5000);
-    return () => { if (pollRef.current) clearInterval(pollRef.current); };
   }, []);
 
   const loadChat = async () => {
