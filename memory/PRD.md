@@ -1,90 +1,28 @@
-# GhostRecon - Secure Messaging Platform v2.0.0
+# Ghost Recon - Expo React Native App
 
-## Overview
-GhostRecon is a military-grade secure messaging application designed for privacy-conscious users, security professionals, journalists, and activists. Built with zero-trace communication principles.
+## Problem Statement
+Android build failing on EAS due to corrupted/invalid gradle-wrapper.jar file.
 
-## Core Features
+## Architecture
+- **Frontend**: Expo/React Native (bare workflow)
+- **Backend**: FastAPI Python
+- **Platform**: Android/iOS mobile app
 
-### Multi-Layer Encryption
-- AES-256-GCM + X25519 encryption protocol for all messages
-- SRTP + ZRTP encryption for voice/video calls
-- Client-side encryption key management
-- Automatic key rotation
+## What's Been Implemented
+- [Feb 2026] Fixed Gradle wrapper files:
+  - Replaced corrupted gradle-wrapper.jar with valid version
+  - Updated gradle-wrapper.properties to use Gradle 8.10.2
+  - Set proper executable permissions on gradlew scripts
 
-### Zero Metadata Architecture
-- Minimal server-side data retention
-- No message content stored in plaintext
-- Forward-protected messages by default
-- Self-destructing messages (10s, 30s, 1m, 5m timers)
+## Core Requirements
+- Valid Android build configuration
+- Compatible Gradle version for Expo SDK
 
-### Real-time WebSocket Messaging
-- WebSocket connection for instant message delivery
-- Typing indicators via WebSocket
-- Auto-reconnection with keepalive ping
-- Server-side connection management per user
+## Backlog
+- P0: None (build issue resolved)
+- P1: Validate iOS build configuration
+- P2: Add prebuild validation scripts
 
-### Push Notifications
-- Expo push notification registration
-- Android notification channels (Messages, Calls)
-- Local notifications for incoming messages
-- Background notification handling
-
-### Authentication
-- **Anonymous Access**: Device fingerprint-only registration, no personal data
-- **Pseudonym Registration**: Optional email/phone with codename alias
-- JWT token-based session management
-
-### Device-Level Security
-- Screenshot protection toggle
-- Read receipt blocking
-- Typing indicator control
-- Link preview prevention (metadata leak protection)
-- Auto-delete message scheduling (1, 7, 30, 90 days)
-
-### Advanced Message Control
-- Self-destructing messages with configurable timers
-- Message recall/unsend capability
-- Forward protection on all messages
-- End-to-end encryption indicators
-
-### Stealth & Panic Features
-- **Decoy Mode**: Calculator disguise app (enter code 1337= to unlock)
-- **Panic Wipe**: Emergency destruction of all data
-- Two-step confirmation for panic wipe
-
-### Secure Voice & Video Calls
-- Voice and video call initiation
-- SRTP + ZRTP encryption display
-- Call duration tracking
-- Mute/camera toggle controls
-
-### Military-Level Key Management
-- Key rotation capability
-- Key fingerprint display (SHA-256 hash)
-- Encryption status visualization
-- Trust level system for contacts (1-5 bars)
-
-## Technical Stack
-- **Frontend**: React Native / Expo SDK 54
-- **Backend**: Python FastAPI with WebSocket support
-- **Database**: MongoDB
-- **Auth**: JWT (HS256)
-- **Real-time**: WebSocket (FastAPI native)
-- **Notifications**: expo-notifications
-- **Build**: EAS Build (eas.json configured)
-
-## Launch Readiness
-
-### Ready for Launch
-- Custom app icon and splash screen (Shield + G branding)
-- EAS build config for development, preview, and production
-- Android permissions (Camera, Mic, Contacts, Biometrics)
-- iOS permissions with App Store-compliant descriptions
-- Push notification channels configured
-
-### v4.0 Changes
-- react-native-webrtc installed with full signaling server (offer/answer/ICE via WebSocket)
-- WebRTC STUN/TURN config endpoint (/api/webrtc/config)
-- Group chat encryption: symmetric key generation, multi-party distribution, key rotation
-- Disappearing profile photos: view-limited, time-expiring, auto-destruct
-- Photo library and camera permissions configured for iOS/Android
+## Next Tasks
+- Retry EAS Android build
+- Monitor build logs for any remaining issues
