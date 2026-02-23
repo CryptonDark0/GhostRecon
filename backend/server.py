@@ -604,11 +604,94 @@ async def seed_data():
 
     return {"status": "seeded", "users": len(created_users)}
 
+# ============ WEBSOCKET CONNECTION MANAGER ============
+
+class ConnectionManager:
+    def __init__(self):
+        self.active_connections: Dict[str, Set[WebSocket]] = {}
+
+    async def connect(self, user_id: str, websocket: WebSocket):
+        await websocket.accept()
+        if user_id not in self.active_connections:
+            self.active_connections[user_id] = set()
+        self.active_connections[user_id].add(websocket)
+        await db.users.update_one({"id": user_id}, {"$set": {"is_online": True, "last_seen": datetime.now(timezone.utc).isoformat()}})
+
+    def disconnect(self, user_id: str, websocket: WebSocket):
+        if user_id in self.active_connections:
+            self.active_connections[user_id].discard(websocket)
+            if not self.active_connections[user_id]:
+                del self.active_connections[user_id]
+                asyncio.create_task(db.users.update_one({"id": user_id}, {"$set": {"is_online": False, "last_seen": datetime.now(timezone.utc).isoformat()}}))
+
+    async def send_to_user(self, user_id: str, data: dict):
+        if user_id in self.active_connections:
+            dead = set()
+            for ws in self.active_connections[user_id]:
+                try:
+                    await ws.send_json(data)
+                except Exception:
+                    dead.add(ws)
+            for ws in dead:
+                self.active_connections[user_id].discard(ws)
+
+    async def broadcast_to_conversation(self, conv_id: str, data: dict, exclude_user: str = None):
+        conv = await db.conversations.find_one({"id": conv_id}, {"_id": 0})
+        if conv:
+            for pid in conv.get("participants", []):
+                if pid != exclude_user:
+                    await self.send_to_user(pid, data)
+
+ws_manager = ConnectionManager()
+
+@app.websocket("/api/ws/{token}")
+async def websocket_endpoint(websocket: WebSocket, token: str):
+    try:
+        payload = jwt.decode(token, JWT_SECRET, algorithms=[JWT_ALGORITHM])
+        user_id = payload.get("sub")
+        if not user_id:
+            await websocket.close(code=4001)
+            return
+    except JWTError:
+        await websocket.close(code=4001)
+        return
+
+    await ws_manager.connect(user_id, websocket)
+    try:
+        while True:
+            data = await websocket.receive_text()
+            msg = json.loads(data)
+            if msg.get("type") == "ping":
+                await websocket.send_json({"type": "pong"})
+            elif msg.get("type") == "typing":
+                await ws_manager.broadcast_to_conversation(
+                    msg.get("conversation_id", ""),
+                    {"type": "typing", "user_id": user_id, "conversation_id": msg.get("conversation_id")},
+                    exclude_user=user_id
+                )
+    except WebSocketDisconnect:
+        ws_manager.disconnect(user_id, websocket)
+    except Exception:
+        ws_manager.disconnect(user_id, websocket)
+
+# ============ PUSH NOTIFICATION TOKEN ============
+
+class PushTokenRegister(BaseModel):
+    push_token: str
+
+@api_router.post("/notifications/register")
+async def register_push_token(data: PushTokenRegister, user=Depends(get_current_user)):
+    await db.users.update_one(
+        {"id": user["id"]},
+        {"$set": {"push_token": data.push_token}}
+    )
+    return {"status": "registered"}
+
 # ============ STATUS ============
 
 @api_router.get("/")
 async def root():
-    return {"status": "operational", "app": "GhostRecon", "version": "1.0.0"}
+    return {"status": "operational", "app": "GhostRecon", "version": "2.0.0"}
 
 @api_router.get("/health")
 async def health():
