@@ -30,6 +30,28 @@ export default function SettingsScreen() {
       const s = await apiCall('/security/settings');
       if (s) setSettings(s);
     } catch {}
+    // Check biometric
+    const hasHw = await LocalAuthentication.hasHardwareAsync();
+    const enrolled = await LocalAuthentication.isEnrolledAsync();
+    setBiometricAvailable(hasHw && enrolled);
+    const bioEnabled = await AsyncStorage.getItem('ghostrecon_biometric_enabled');
+    setBiometricEnabled(bioEnabled === 'true');
+    // Load key fingerprint
+    try {
+      const kp = await getOrCreateKeyPair();
+      setKeyFingerprint(getKeyFingerprint(kp.publicKey));
+    } catch {}
+  };
+
+  const toggleBiometric = async (enabled: boolean) => {
+    if (enabled) {
+      const result = await LocalAuthentication.authenticateAsync({
+        promptMessage: 'Verify to enable biometric lock',
+      });
+      if (!result.success) return;
+    }
+    setBiometricEnabled(enabled);
+    await AsyncStorage.setItem('ghostrecon_biometric_enabled', enabled ? 'true' : 'false');
   };
 
   const updateSetting = async (key: string, value: any) => {
