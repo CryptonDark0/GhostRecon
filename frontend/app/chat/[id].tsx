@@ -70,7 +70,7 @@ export default function ChatDetail() {
     const text = input.trim();
     setInput('');
     try {
-      await apiCall('/messages', {
+      const msg = await apiCall('/messages', {
         method: 'POST',
         body: JSON.stringify({
           conversation_id: id,
@@ -79,8 +79,13 @@ export default function ChatDetail() {
           forward_protected: true,
         }),
       });
-      await loadMessages();
+      setMessages(prev => [...prev, msg]);
     } catch {}
+  };
+
+  const handleInputChange = (text: string) => {
+    setInput(text);
+    sendWsMessage({ type: 'typing', conversation_id: id });
   };
 
   const recallMessage = async (messageId: string) => {
