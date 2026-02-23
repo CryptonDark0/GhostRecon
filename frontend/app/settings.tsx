@@ -262,4 +262,11 @@ const styles = StyleSheet.create({
     padding: 16, marginTop: 32,
   },
   infoText: { color: COLORS.muted_text, fontSize: 11, fontFamily: 'monospace', lineHeight: 18, flex: 1 },
+  keyCard: {
+    backgroundColor: COLORS.gunmetal, borderLeftWidth: 2, borderLeftColor: COLORS.alert_amber,
+    padding: 16, marginTop: 12,
+  },
+  keyLabel: { color: COLORS.alert_amber, fontSize: 10, fontWeight: '700', fontFamily: 'monospace', letterSpacing: 1, marginBottom: 6 },
+  keyHash: { color: COLORS.ghost_white, fontSize: 12, fontFamily: 'monospace', letterSpacing: 1 },
+  keyDesc: { color: COLORS.muted_text, fontSize: 10, fontFamily: 'monospace', marginTop: 4 },
 });
