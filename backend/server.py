@@ -284,9 +284,20 @@ async def add_contact(data: ContactAdd, user=Depends(get_current_user)):
 @api_router.get("/contacts")
 async def get_contacts(user=Depends(get_current_user)):
     contacts = await db.contacts.find({"user_id": user["id"]}, {"_id": 0}).to_list(1000)
+    if not contacts:
+        return []
+    
+    # Batch fetch all contact users to avoid N+1 queries
+    contact_ids = [c["contact_id"] for c in contacts]
+    users_cursor = db.users.find(
+        {"id": {"$in": contact_ids}},
+        {"_id": 0, "password_hash": 0}
+    )
+    users_map = {u["id"]: u async for u in users_cursor}
+    
     enriched = []
     for c in contacts:
-        target = await db.users.find_one({"id": c["contact_id"]}, {"_id": 0, "password_hash": 0})
+        target = users_map.get(c["contact_id"])
         if target:
             c["contact_info"] = {
                 "alias": target.get("alias"),
@@ -353,12 +364,40 @@ async def get_conversations(user=Depends(get_current_user)):
         {"_id": 0}
     ).sort("last_message_at", -1).to_list(100)
 
+    if not convs:
+        return []
+
+    # Batch fetch all participant users to avoid N+1 queries
+    all_participant_ids = set()
+    for c in convs:
+        all_participant_ids.update(c.get("participants", []))
+    all_participant_ids.discard(user["id"])
+    
+    users_cursor = db.users.find(
+        {"id": {"$in": list(all_participant_ids)}},
+        {"_id": 0, "password_hash": 0}
+    )
+    users_map = {u["id"]: u async for u in users_cursor}
+
+    # Batch fetch unread counts using aggregation
+    conv_ids = [c["id"] for c in convs]
+    unread_pipeline = [
+        {"$match": {
+            "conversation_id": {"$in": conv_ids},
+            "sender_id": {"$ne": user["id"]},
+            "read": False
+        }},
+        {"$group": {"_id": "$conversation_id", "count": {"$sum": 1}}}
+    ]
+    unread_cursor = db.messages.aggregate(unread_pipeline)
+    unread_map = {doc["_id"]: doc["count"] async for doc in unread_cursor}
+
     enriched = []
     for c in convs:
         participant_info = []
         for pid in c.get("participants", []):
             if pid != user["id"]:
-                p = await db.users.find_one({"id": pid}, {"_id": 0, "password_hash": 0})
+                p = users_map.get(pid)
                 if p:
                     participant_info.append({
                         "id": p["id"],
@@ -366,12 +405,7 @@ async def get_conversations(user=Depends(get_current_user)):
                         "is_online": p.get("is_online", False)
                     })
         c["participant_info"] = participant_info
-        unread = await db.messages.count_documents({
-            "conversation_id": c["id"],
-            "sender_id": {"$ne": user["id"]},
-            "read": False
-        })
-        c["unread_count"] = unread
+        c["unread_count"] = unread_map.get(c["id"], 0)
         enriched.append(c)
     return enriched
 
