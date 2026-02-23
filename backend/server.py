@@ -104,6 +104,14 @@ class SecuritySettings(BaseModel):
 class PanicWipeRequest(BaseModel):
     confirm_code: str
 
+class PublicKeyUpdate(BaseModel):
+    public_key: str
+
+class CallSignal(BaseModel):
+    call_id: str
+    signal_type: str  # offer, answer, ice-candidate
+    signal_data: str
+
 # ============ AUTH HELPERS ============
 
 def create_token(user_id: str, alias: str) -> str:
