@@ -16,6 +16,7 @@
         "NSMicrophoneUsageDescription": "Make encrypted voice calls",
         "NSContactsUsageDescription": "Find contacts in your network",
         "NSFaceIDUsageDescription": "Unlock app with biometrics",
+        "NSPhotoLibraryUsageDescription": "Set disappearing profile photo",
         "UIBackgroundModes": ["remote-notification"]
       },
       "config": {
