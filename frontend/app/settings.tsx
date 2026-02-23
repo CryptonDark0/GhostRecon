@@ -80,7 +80,38 @@ export default function SettingsScreen() {
       </View>
 
       <ScrollView style={styles.content}>
-        <Text style={styles.sectionTitle}>PRIVACY CONTROLS</Text>
+        <Text style={styles.sectionTitle}>DEVICE SECURITY</Text>
+
+        {biometricAvailable && (
+          <View style={styles.settingRow}>
+            <View style={styles.settingInfo}>
+              <View style={styles.settingIcon}>
+                <Fingerprint size={18} color={COLORS.terminal_green} />
+              </View>
+              <View>
+                <Text style={styles.settingLabel}>Biometric Lock</Text>
+                <Text style={styles.settingDesc}>Face ID / Fingerprint to unlock app</Text>
+              </View>
+            </View>
+            <Switch
+              testID="biometric-toggle"
+              value={biometricEnabled}
+              onValueChange={toggleBiometric}
+              trackColor={{ false: COLORS.armour_grey, true: COLORS.terminal_green }}
+              thumbColor={COLORS.ghost_white}
+            />
+          </View>
+        )}
+
+        {keyFingerprint ? (
+          <View style={styles.keyCard}>
+            <Text style={styles.keyLabel}>E2E KEY FINGERPRINT</Text>
+            <Text style={styles.keyHash}>{keyFingerprint}</Text>
+            <Text style={styles.keyDesc}>X25519 + NaCl verified</Text>
+          </View>
+        ) : null}
+
+        <Text style={[styles.sectionTitle, { marginTop: 24 }]}>PRIVACY CONTROLS</Text>
 
         <View style={styles.settingRow}>
           <View style={styles.settingInfo}>
