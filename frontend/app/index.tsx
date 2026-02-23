@@ -7,6 +7,7 @@ import { useRouter } from 'expo-router';
 import { Shield, Lock, Eye, Fingerprint } from 'lucide-react-native';
 import { COLORS } from '../src/constants';
 import { getToken } from '../src/api';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const { width } = Dimensions.get('window');
 
