@@ -557,12 +557,85 @@ async def session_info(user=Depends(get_current_user)):
         "user_id": user["id"],
         "alias": user["alias"],
         "encryption_key_hash": user.get("encryption_key_hash", ""),
+        "public_key": user.get("public_key", ""),
         "registration_type": user.get("registration_type"),
         "trust_level": user.get("trust_level", 0),
         "key_rotation_available": True,
         "active_conversations": await db.conversations.count_documents({"participants": user["id"]}),
         "total_contacts": await db.contacts.count_documents({"user_id": user["id"]})
     }
+
+# ============ PUBLIC KEY EXCHANGE ============
+
+@api_router.post("/keys/publish")
+async def publish_public_key(data: PublicKeyUpdate, user=Depends(get_current_user)):
+    await db.users.update_one(
+        {"id": user["id"]},
+        {"$set": {"public_key": data.public_key}}
+    )
+    return {"status": "published"}
+
+@api_router.get("/keys/{user_id}")
+async def get_public_key(user_id: str, user=Depends(get_current_user)):
+    target = await db.users.find_one({"id": user_id}, {"_id": 0, "public_key": 1, "alias": 1, "id": 1})
+    if not target or not target.get("public_key"):
+        raise HTTPException(status_code=404, detail="Public key not found")
+    return {"user_id": target["id"], "alias": target.get("alias"), "public_key": target["public_key"]}
+
+# ============ CALL SIGNALING ============
+
+@api_router.post("/calls/signal")
+async def call_signal(data: CallSignal, user=Depends(get_current_user)):
+    call = await db.calls.find_one({"id": data.call_id}, {"_id": 0})
+    if not call:
+        raise HTTPException(status_code=404, detail="Call not found")
+
+    # Determine target user
+    target_id = call["receiver_id"] if call["caller_id"] == user["id"] else call["caller_id"]
+
+    # Send signal via WebSocket
+    await ws_manager.send_to_user(target_id, {
+        "type": "call_signal",
+        "call_id": data.call_id,
+        "signal_type": data.signal_type,
+        "signal_data": data.signal_data,
+        "from_user_id": user["id"]
+    })
+
+    return {"status": "signaled"}
+
+@api_router.put("/calls/{call_id}/accept")
+async def accept_call(call_id: str, user=Depends(get_current_user)):
+    call = await db.calls.find_one({"id": call_id}, {"_id": 0})
+    if not call:
+        raise HTTPException(status_code=404, detail="Call not found")
+
+    await db.calls.update_one({"id": call_id}, {"$set": {"status": "connected"}})
+
+    # Notify caller via WebSocket
+    await ws_manager.send_to_user(call["caller_id"], {
+        "type": "call_accepted",
+        "call_id": call_id,
+        "accepted_by": user["id"]
+    })
+
+    return {"status": "accepted"}
+
+@api_router.put("/calls/{call_id}/reject")
+async def reject_call(call_id: str, user=Depends(get_current_user)):
+    call = await db.calls.find_one({"id": call_id}, {"_id": 0})
+    if not call:
+        raise HTTPException(status_code=404, detail="Call not found")
+
+    await db.calls.update_one({"id": call_id}, {"$set": {"status": "rejected"}})
+
+    # Notify caller via WebSocket
+    await ws_manager.send_to_user(call["caller_id"], {
+        "type": "call_rejected",
+        "call_id": call_id
+    })
+
+    return {"status": "rejected"}
 
 # ============ USERS SEARCH ============
 
