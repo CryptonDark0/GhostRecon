@@ -26,6 +26,13 @@ export default function HomeScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
+  // Connect WebSocket for real-time updates
+  useWebSocket((msg) => {
+    if (msg.type === 'new_message') {
+      loadData();
+    }
+  });
+
   useEffect(() => {
     loadData();
   }, []);
@@ -34,6 +41,16 @@ export default function HomeScreen() {
     try {
       const u = await getUser();
       setUserState(u);
+
+      // Generate and publish E2E encryption key
+      try {
+        const kp = await getOrCreateKeyPair();
+        await apiCall('/keys/publish', {
+          method: 'POST',
+          body: JSON.stringify({ public_key: kp.publicKey }),
+        });
+      } catch {}
+
       const [convs, callHistory, contactList, secInfo] = await Promise.all([
         apiCall('/conversations').catch(() => []),
         apiCall('/calls').catch(() => []),
