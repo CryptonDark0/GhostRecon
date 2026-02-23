@@ -1,4 +1,4 @@
-# GhostRecon - Secure Messaging Platform
+# GhostRecon - Secure Messaging Platform v2.0.0
 
 ## Overview
 GhostRecon is a military-grade secure messaging application designed for privacy-conscious users, security professionals, journalists, and activists. Built with zero-trace communication principles.
@@ -16,6 +16,18 @@ GhostRecon is a military-grade secure messaging application designed for privacy
 - No message content stored in plaintext
 - Forward-protected messages by default
 - Self-destructing messages (10s, 30s, 1m, 5m timers)
+
+### Real-time WebSocket Messaging
+- WebSocket connection for instant message delivery
+- Typing indicators via WebSocket
+- Auto-reconnection with keepalive ping
+- Server-side connection management per user
+
+### Push Notifications
+- Expo push notification registration
+- Android notification channels (Messages, Calls)
+- Local notifications for incoming messages
+- Background notification handling
 
 ### Authentication
 - **Anonymous Access**: Device fingerprint-only registration, no personal data
@@ -37,7 +49,7 @@ GhostRecon is a military-grade secure messaging application designed for privacy
 
 ### Stealth & Panic Features
 - **Decoy Mode**: Calculator disguise app (enter code 1337= to unlock)
-- **Panic Wipe**: Emergency destruction of all data (messages, contacts, calls, conversations)
+- **Panic Wipe**: Emergency destruction of all data
 - Two-step confirmation for panic wipe
 
 ### Secure Voice & Video Calls
@@ -52,36 +64,27 @@ GhostRecon is a military-grade secure messaging application designed for privacy
 - Encryption status visualization
 - Trust level system for contacts (1-5 bars)
 
-### Contact Management
-- Trust network with verification levels
-- Contact search by codename
-- Trust level assignment and modification
-
 ## Technical Stack
-- **Frontend**: React Native / Expo (SDK 54)
-- **Backend**: Python FastAPI
+- **Frontend**: React Native / Expo SDK 54
+- **Backend**: Python FastAPI with WebSocket support
 - **Database**: MongoDB
 - **Auth**: JWT (HS256)
-- **Encryption**: bcrypt for passwords, SHA-256 for key hashing
+- **Real-time**: WebSocket (FastAPI native)
+- **Notifications**: expo-notifications
+- **Build**: EAS Build (eas.json configured)
 
-## API Endpoints
-- POST /api/auth/register/anonymous
-- POST /api/auth/register/pseudonym
-- POST /api/auth/login
-- GET /api/auth/me
-- CRUD /api/contacts
-- CRUD /api/conversations
-- CRUD /api/messages
-- CRUD /api/calls
-- GET/PUT /api/security/settings
-- POST /api/security/rotate-keys
-- POST /api/security/panic-wipe
-- GET /api/security/session-info
-- GET /api/users/search
-- POST /api/seed
+## Launch Readiness
 
-## Design
-- Dark/stealth military theme
-- Colors: Void Black (#050505), Terminal Green (#00FF41), Alert Amber (#FFB000), Critical Red (#FF3B30)
-- Monospace typography for tactical feel
-- Sharp borders, minimal animations
+### Ready for Launch
+- Custom app icon and splash screen (Shield + G branding)
+- EAS build config for development, preview, and production
+- Android permissions (Camera, Mic, Contacts, Biometrics)
+- iOS permissions with App Store-compliant descriptions
+- Push notification channels configured
+
+### Requires Production Setup
+- Apple Developer account + bundle ID setup
+- Google Play Console + keystore
+- Production MongoDB Atlas
+- Production backend hosting (Railway/Render/AWS)
+- Replace EAS submit placeholder credentials
