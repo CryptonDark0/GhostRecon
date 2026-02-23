@@ -646,6 +646,183 @@ async def reject_call(call_id: str, user=Depends(get_current_user)):
 
     return {"status": "rejected"}
 
+# ============ GROUP ENCRYPTION ============
+
+@api_router.post("/groups/distribute-key")
+async def distribute_group_key(data: GroupKeyDistribution, user=Depends(get_current_user)):
+    """Distribute encrypted group key to all conversation participants"""
+    conv = await db.conversations.find_one({"id": data.conversation_id, "participants": user["id"]}, {"_id": 0})
+    if not conv:
+        raise HTTPException(status_code=404, detail="Conversation not found")
+
+    await db.group_keys.update_one(
+        {"conversation_id": data.conversation_id},
+        {"$set": {
+            "conversation_id": data.conversation_id,
+            "encrypted_keys": data.encrypted_keys,
+            "distributed_by": user["id"],
+            "distributed_at": datetime.now(timezone.utc).isoformat(),
+            "rotation_count": 0
+        }},
+        upsert=True
+    )
+
+    # Notify participants via WebSocket
+    for pid in conv.get("participants", []):
+        if pid != user["id"] and pid in data.encrypted_keys:
+            await ws_manager.send_to_user(pid, {
+                "type": "group_key_update",
+                "conversation_id": data.conversation_id,
+                "encrypted_key": data.encrypted_keys[pid]
+            })
+
+    return {"status": "distributed", "recipients": len(data.encrypted_keys)}
+
+@api_router.get("/groups/{conv_id}/key")
+async def get_group_key(conv_id: str, user=Depends(get_current_user)):
+    """Get my encrypted group key for a conversation"""
+    conv = await db.conversations.find_one({"id": conv_id, "participants": user["id"]}, {"_id": 0})
+    if not conv:
+        raise HTTPException(status_code=404, detail="Conversation not found")
+
+    gk = await db.group_keys.find_one({"conversation_id": conv_id}, {"_id": 0})
+    if not gk:
+        raise HTTPException(status_code=404, detail="No group key distributed yet")
+
+    my_key = gk.get("encrypted_keys", {}).get(user["id"])
+    if not my_key:
+        raise HTTPException(status_code=404, detail="No key for this user")
+
+    return {
+        "conversation_id": conv_id,
+        "encrypted_key": my_key,
+        "distributed_by": gk.get("distributed_by"),
+        "distributed_at": gk.get("distributed_at"),
+        "rotation_count": gk.get("rotation_count", 0)
+    }
+
+@api_router.post("/groups/{conv_id}/rotate-key")
+async def rotate_group_key(conv_id: str, data: GroupKeyDistribution, user=Depends(get_current_user)):
+    """Rotate the group encryption key"""
+    conv = await db.conversations.find_one({"id": conv_id, "participants": user["id"]}, {"_id": 0})
+    if not conv:
+        raise HTTPException(status_code=404, detail="Conversation not found")
+
+    result = await db.group_keys.update_one(
+        {"conversation_id": conv_id},
+        {
+            "$set": {
+                "encrypted_keys": data.encrypted_keys,
+                "distributed_by": user["id"],
+                "distributed_at": datetime.now(timezone.utc).isoformat(),
+            },
+            "$inc": {"rotation_count": 1}
+        }
+    )
+
+    for pid in conv.get("participants", []):
+        if pid != user["id"]:
+            await ws_manager.send_to_user(pid, {
+                "type": "group_key_rotated",
+                "conversation_id": conv_id
+            })
+
+    return {"status": "rotated"}
+
+# ============ DISAPPEARING PROFILE PHOTOS ============
+
+@api_router.post("/profile/photo")
+async def upload_profile_photo(data: ProfilePhotoUpload, user=Depends(get_current_user)):
+    now = datetime.now(timezone.utc)
+    expires_at = None
+    if data.disappear_after_seconds:
+        expires_at = (now + timedelta(seconds=data.disappear_after_seconds)).isoformat()
+
+    photo = {
+        "id": str(uuid.uuid4()),
+        "user_id": user["id"],
+        "photo_data": data.photo_data,
+        "disappear_after_views": data.disappear_after_views,
+        "disappear_after_seconds": data.disappear_after_seconds,
+        "view_count": 0,
+        "viewers": [],
+        "created_at": now.isoformat(),
+        "expires_at": expires_at,
+        "active": True
+    }
+    await db.profile_photos.insert_one(photo)
+    photo.pop("_id", None)
+
+    await db.users.update_one(
+        {"id": user["id"]},
+        {"$set": {"has_disappearing_photo": True, "photo_id": photo["id"]}}
+    )
+
+    return {"status": "uploaded", "photo_id": photo["id"]}
+
+@api_router.get("/profile/photo/{user_id}")
+async def view_profile_photo(user_id: str, user=Depends(get_current_user)):
+    photo = await db.profile_photos.find_one(
+        {"user_id": user_id, "active": True},
+        {"_id": 0}
+    )
+    if not photo:
+        raise HTTPException(status_code=404, detail="No active photo")
+
+    # Check expiry
+    if photo.get("expires_at"):
+        if datetime.now(timezone.utc).isoformat() > photo["expires_at"]:
+            await db.profile_photos.update_one({"id": photo["id"]}, {"$set": {"active": False}})
+            await db.users.update_one({"id": user_id}, {"$set": {"has_disappearing_photo": False}})
+            raise HTTPException(status_code=404, detail="Photo expired")
+
+    # Track view
+    if user["id"] != user_id and user["id"] not in photo.get("viewers", []):
+        new_count = photo.get("view_count", 0) + 1
+        update = {
+            "$inc": {"view_count": 1},
+            "$push": {"viewers": user["id"]}
+        }
+
+        if new_count >= photo.get("disappear_after_views", 1):
+            update["$set"] = {"active": False}
+            await db.users.update_one({"id": user_id}, {"$set": {"has_disappearing_photo": False}})
+
+        await db.profile_photos.update_one({"id": photo["id"]}, update)
+
+    return {
+        "photo_data": photo["photo_data"],
+        "view_count": photo.get("view_count", 0),
+        "max_views": photo.get("disappear_after_views", 1),
+        "expires_at": photo.get("expires_at"),
+        "created_at": photo.get("created_at")
+    }
+
+@api_router.delete("/profile/photo")
+async def delete_profile_photo(user=Depends(get_current_user)):
+    await db.profile_photos.update_many(
+        {"user_id": user["id"]},
+        {"$set": {"active": False}}
+    )
+    await db.users.update_one({"id": user["id"]}, {"$set": {"has_disappearing_photo": False}})
+    return {"status": "deleted"}
+
+# ============ WEBRTC CONFIG ============
+
+@api_router.get("/webrtc/config")
+async def get_webrtc_config(user=Depends(get_current_user)):
+    """Return STUN/TURN server configuration for WebRTC"""
+    return {
+        "iceServers": [
+            {"urls": "stun:stun.l.google.com:19302"},
+            {"urls": "stun:stun1.l.google.com:19302"},
+            {"urls": "stun:stun2.l.google.com:19302"},
+            {"urls": "stun:stun3.l.google.com:19302"},
+            {"urls": "stun:stun4.l.google.com:19302"},
+        ],
+        "iceCandidatePoolSize": 10
+    }
+
 # ============ USERS SEARCH ============
 
 @api_router.get("/users/search")
