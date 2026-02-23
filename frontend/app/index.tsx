@@ -16,6 +16,13 @@ export default function OnboardingScreen() {
   const [slideAnim] = useState(new Animated.Value(50));
   const [glowAnim] = useState(new Animated.Value(0.3));
 
+  const checkAuth = async () => {
+    const token = await getToken();
+    if (token) {
+      router.replace('/home');
+    }
+  };
+
   useEffect(() => {
     checkAuth();
     Animated.parallel([
@@ -30,13 +37,6 @@ export default function OnboardingScreen() {
       ])
     ).start();
   }, []);
-
-  const checkAuth = async () => {
-    const token = await getToken();
-    if (token) {
-      router.replace('/home');
-    }
-  };
 
   return (
     <SafeAreaView style={styles.container}>
