@@ -112,6 +112,15 @@ class CallSignal(BaseModel):
     signal_type: str  # offer, answer, ice-candidate
     signal_data: str
 
+class GroupKeyDistribution(BaseModel):
+    conversation_id: str
+    encrypted_keys: dict  # {user_id: encrypted_group_key}
+
+class ProfilePhotoUpload(BaseModel):
+    photo_data: str  # base64
+    disappear_after_views: int = 1
+    disappear_after_seconds: Optional[int] = None
+
 # ============ AUTH HELPERS ============
 
 def create_token(user_id: str, alias: str) -> str:
