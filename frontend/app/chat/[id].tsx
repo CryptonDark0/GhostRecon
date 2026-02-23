@@ -220,7 +220,7 @@ export default function ChatDetail() {
             testID="message-input"
             style={styles.input}
             value={input}
-            onChangeText={setInput}
+            onChangeText={handleInputChange}
             placeholder="Type encrypted message..."
             placeholderTextColor={COLORS.stealth_grey}
             multiline
