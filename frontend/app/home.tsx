@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity, SafeAreaView,
-  FlatList, ActivityIndicator, RefreshControl,
+  FlatList, ActivityIndicator, RefreshControl, ScrollView,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import {
@@ -9,6 +9,9 @@ import {
 } from 'lucide-react-native';
 import { COLORS } from '../src/constants';
 import { apiCall, getUser, clearAuth } from '../src/api';
+import { getOrCreateKeyPair, getKeyFingerprint } from '../src/encryption';
+import { useWebSocket } from '../src/websocket';
+import { disconnectWebSocket } from '../src/websocket';
 
 type Tab = 'chats' | 'calls' | 'contacts' | 'security';
 
