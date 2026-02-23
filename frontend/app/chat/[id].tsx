@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity, SafeAreaView,
   FlatList, TextInput, KeyboardAvoidingView, Platform, ActivityIndicator,
@@ -7,6 +7,8 @@ import { useRouter, useLocalSearchParams } from 'expo-router';
 import { ChevronLeft, Send, Lock, Clock, Shield, Phone, Video, Trash2 } from 'lucide-react-native';
 import { COLORS } from '../../src/constants';
 import { apiCall, getUser } from '../../src/api';
+import { useWebSocket, sendWsMessage } from '../../src/websocket';
+import { sendLocalNotification } from '../../src/notifications';
 
 export default function ChatDetail() {
   const router = useRouter();
