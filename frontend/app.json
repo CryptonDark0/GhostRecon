@@ -70,7 +70,8 @@
     "extra": {
       "eas": {
         "projectId": "3e15c5bd-e418-43b6-b7de-788ebdd6511b"
-      }
+      },
+      "API_URL": "https://ghostrecon-4.onrender.com/api"
     }
   }
 }
