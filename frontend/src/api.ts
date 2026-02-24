@@ -1,5 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { API_BASE } from './constants';
+import { API_BASE } from './config';
 
 const TOKEN_KEY = 'ghostrecon_token';
 const USER_KEY = 'ghostrecon_user';
