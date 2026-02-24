@@ -13,3 +13,5 @@ python-dotenv
 httpx
 requests
 websockets
+gunicorn
+
