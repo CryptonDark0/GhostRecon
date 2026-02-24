@@ -20,7 +20,7 @@
     "integration_issues": [
       {
         "flow": "ALL FRONTEND FLOWS",
-        "issue": "Ngrok tunnel continuously failing - frontend completely inaccessible at https://build-repair-20.preview.emergentagent.com (HTTP 520). Expo service stuck in STARTING state. Cannot test any UI flows.",
+        "issue": "Ngrok tunnel continuously failing - frontend completely inaccessible at https://android-deploy-check.preview.emergentagent.com (HTTP 520). Expo service stuck in STARTING state. Cannot test any UI flows.",
         "affected_testIDs": "ALL",
         "priority": "CRITICAL - INFRASTRUCTURE"
       }

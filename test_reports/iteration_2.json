@@ -20,7 +20,7 @@
     "integration_issues": [
       {
         "flow": "ALL FRONTEND FLOWS",
-        "issue": "Ngrok tunnel infrastructure failure - HTTP 520 error at https://build-repair-20.preview.emergentagent.com/. Cloudflare reports 'Host Error' - unknown connection issue. Expo service stuck in STARTING state. Same issue as iteration 1. INFRASTRUCTURE ISSUE, not code issue.",
+        "issue": "Ngrok tunnel infrastructure failure - HTTP 520 error at https://android-deploy-check.preview.emergentagent.com/. Cloudflare reports 'Host Error' - unknown connection issue. Expo service stuck in STARTING state. Same issue as iteration 1. INFRASTRUCTURE ISSUE, not code issue.",
         "affected_testIDs": "ALL",
         "priority": "CRITICAL - INFRASTRUCTURE"
       }
