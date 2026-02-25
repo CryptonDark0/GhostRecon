@@ -1,7 +1,11 @@
 // api.js
 import { BASE_URL } from './config';
 
-// Helper for GET requests
+// ========================
+// Helper Functions
+// ========================
+
+// GET requests
 async function getRequest(url, token) {
   const res = await fetch(`${BASE_URL}${url}`, {
     headers: token
@@ -15,7 +19,7 @@ async function getRequest(url, token) {
   return await res.json();
 }
 
-// Helper for POST/PUT/DELETE requests
+// POST / PUT / DELETE requests
 async function sendRequest(url, method, body, token) {
   const res = await fetch(`${BASE_URL}${url}`, {
     method,
@@ -41,7 +45,9 @@ export const auth = {
 
   getMe: (token) => getRequest('/auth/me', token),
 
-  registerAnonymous: () => sendRequest('/auth/register/anonymous', 'POST'),
+  // FIXED: send required body for anonymous registration
+  registerAnonymous: (device_fingerprint, alias) =>
+    sendRequest('/auth/register/anonymous', 'POST', { device_fingerprint, alias }),
 
   registerPseudonym: (username, password) =>
     sendRequest('/auth/register/pseudonym', 'POST', { username, password }),
