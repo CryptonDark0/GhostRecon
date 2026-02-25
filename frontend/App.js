@@ -1,3 +1,6 @@
+import 'react-native-gesture-handler';
+import 'react-native-reanimated';
+
 import React, { useEffect, useState } from "react";
 import { View, Text, StyleSheet, ActivityIndicator } from "react-native";
 import Constants from "expo-constants";
