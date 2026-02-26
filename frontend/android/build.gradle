@@ -6,12 +6,12 @@ buildscript {
     mavenCentral()
   }
   dependencies {
-    classpath('com.android.tools.build:gradle')
-    classpath('com.facebook.react:react-native-gradle-plugin')
-    classpath('org.jetbrains.kotlin:kotlin-gradle-plugin')
+    classpath("com.android.tools.build:gradle")
+    classpath("com.facebook.react:react-native-gradle-plugin")
+    classpath("org.jetbrains.kotlin:kotlin-gradle-plugin")
 
-    // ✅ ADD THIS LINE (Google Services)
-    classpath('com.google.gms:google-services:4.4.4')
+    // Google Services Gradle plugin (required for Firebase)
+    classpath("com.google.gms:google-services:4.4.4")
   }
 }
 
@@ -19,8 +19,13 @@ allprojects {
   repositories {
     google()
     mavenCentral()
-    maven { url 'https://www.jitpack.io' }
+    maven { url "https://www.jitpack.io" }
   }
+}
+
+plugins {
+  // Add the dependency for the Google services Gradle plugin
+  id "com.google.gms.google-services" version "4.4.4" apply false
 }
 
 apply plugin: "expo-root-project"
