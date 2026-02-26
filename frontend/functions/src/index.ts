@@ -1,3 +1,18 @@
+import * as functions from "firebase-functions";
+import * as admin from "firebase-admin";
+
+admin.initializeApp();
+
+// Example: Anonymous registration via REST
+export const registerAnonymous = functions.https.onRequest(async (req, res) => {
+  try {
+    const user = await admin.auth().createUser({});
+    res.json({ uid: user.uid });
+  } catch (error) {
+    res.status(500).send(error.message);
+  }
+});
+
 /**
  * Import function triggers from their respective submodules:
  *
