@@ -5,7 +5,16 @@ import {
   createUserWithEmailAndPassword,
   signInWithEmailAndPassword
 } from "firebase/auth";
-import { doc, setDoc, getDoc } from "firebase/firestore";
+import {
+  doc,
+  setDoc,
+  getDoc,
+  collection,
+  addDoc,
+  query,
+  onSnapshot,
+  orderBy
+} from "firebase/firestore";
 
 // Simple API call test
 export async function apiCall() {
@@ -45,7 +54,32 @@ export async function getUser(uid) {
   return userDoc.exists() ? userDoc.data() : null;
 }
 
-// Token storage (optional, e.g. AsyncStorage)
+// Send a message
+export async function sendMessage(chatId, text, userId) {
+  await addDoc(collection(db, "chats", chatId, "messages"), {
+    text,
+    userId,
+    timestamp: new Date()
+  });
+}
+
+// Subscribe to messages
+export function subscribeMessages(chatId, callback) {
+  const q = query(collection(db, "chats", chatId, "messages"), orderBy("timestamp"));
+  return onSnapshot(q, (snapshot) => {
+    const messages = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    callback(messages);
+  });
+}
+
+// Token storage (in memory for now)
+let _authToken = null;
+
 export async function setToken(token) {
+  _authToken = token;
   return token;
+}
+
+export async function getToken() {
+  return _authToken;
 }
