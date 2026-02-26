@@ -1,0 +1,44 @@
+query ListAllChatTypes @auth(level: PUBLIC, insecureReason: "This operation is safe to expose to the public as it only lists general chat types.") {
+  chatTypes {
+    id
+    name
+  }
+}
+
+query GetMyChats @auth(level: USER, insecureReason: "This operation is safe to expose to all logged in users as it filters by the authenticated user's ID.") {
+  chats(where: {
+    chatMembers_on_chat: {
+      exist: {
+        userId: {eq_expr: "auth.uid"}
+      }
+    }
+  }) {
+    id
+    name
+    chatType {
+      name
+    }
+    lastMessageAt
+  }
+}
+
+mutation CreateNewChat($name: String!, $chatTypeId: UUID!) @auth(level: USER, insecureReason: "This operation is safe to expose to all logged in users for creating new chats.") {
+  chat_insert(data: {
+    name: $name,
+    chatTypeId: $chatTypeId,
+    createdAt_expr: "request.time"
+  }) {
+    id
+  }
+}
+
+mutation SendMessageToChat($chatId: UUID!, $content: String!) @auth(level: USER, insecureReason: "This operation is safe to expose to all logged in users as it attributes the message to the sender.") {
+  message_insert(data: {
+    chatId: $chatId,
+    senderId_expr: "auth.uid",
+    content: $content,
+    createdAt_expr: "request.time"
+  }) {
+    id
+  }
+}

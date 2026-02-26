@@ -1,0 +1,95 @@
+[debug] [2026-02-26T06:06:22.496Z] ----------------------------------------------------------------------
+[debug] [2026-02-26T06:06:22.500Z] Command:       C:\Program Files\nodejs\node.exe C:\Users\thaku\AppData\Roaming\npm\node_modules\firebase-tools\lib\bin\firebase.js init
+[debug] [2026-02-26T06:06:22.500Z] CLI Version:   15.8.0
+[debug] [2026-02-26T06:06:22.500Z] Platform:      win32
+[debug] [2026-02-26T06:06:22.500Z] Node Version:  v25.2.1
+[debug] [2026-02-26T06:06:22.501Z] Time:          Thu Feb 26 2026 11:51:22 GMT+0545 (Nepal Time)
+[debug] [2026-02-26T06:06:22.501Z] ----------------------------------------------------------------------
+[debug] 
+[info] 
+     ######## #### ########  ######## ########     ###     ######  ########
+     ##        ##  ##     ## ##       ##     ##  ##   ##  ##       ##
+     ######    ##  ########  ######   ########  #########  ######  ######
+     ##        ##  ##    ##  ##       ##     ## ##     ##       ## ##
+     ##       #### ##     ## ######## ########  ##     ##  ######  ########
+
+You're about to initialize a Firebase project in this directory:
+
+  C:\sonsofunity\GhostRecon\frontend
+
+Before we get started, keep in mind:
+
+  * You are currently outside your home directory
+
+[info] 
+=== Project Setup
+[info] 
+[info] First, let's associate this project directory with a Firebase project.
+[info] You can create multiple project aliases by running firebase use --add, 
+[info] 
+[debug] [2026-02-26T06:08:50.960Z] > command requires scopes: ["email","openid","https://www.googleapis.com/auth/cloudplatformprojects.readonly","https://www.googleapis.com/auth/firebase","https://www.googleapis.com/auth/cloud-platform"]
+[debug] [2026-02-26T06:08:50.960Z] > authorizing via signed-in user (thakurisatish8@gmail.com)
+[debug] [2026-02-26T06:08:50.961Z] Checked if tokens are valid: true, expires at: 1772089558046
+[debug] [2026-02-26T06:08:50.961Z] Checked if tokens are valid: true, expires at: 1772089558046
+[debug] [2026-02-26T06:08:50.963Z] >>> [apiv2][query] GET https://firebase.googleapis.com/v1beta1/projects pageSize=100
+[debug] [2026-02-26T06:08:51.953Z] <<< [apiv2][status] GET https://firebase.googleapis.com/v1beta1/projects 200
+[debug] [2026-02-26T06:08:51.953Z] <<< [apiv2][body] GET https://firebase.googleapis.com/v1beta1/projects [omitted]
+[info] 
+=== Dataconnect Setup
+[info] i  dataconnect: ensuring required API firebasedataconnect.googleapis.com is enabled... 
+[debug] [2026-02-26T06:08:58.739Z] Checked if tokens are valid: true, expires at: 1772089558046
+[debug] [2026-02-26T06:08:58.739Z] Checked if tokens are valid: true, expires at: 1772089558046
+[info] i  dataconnect: ensuring required API sqladmin.googleapis.com is enabled... 
+[debug] [2026-02-26T06:08:58.740Z] Checked if tokens are valid: true, expires at: 1772089558046
+[debug] [2026-02-26T06:08:58.740Z] Checked if tokens are valid: true, expires at: 1772089558046
+[debug] [2026-02-26T06:08:58.740Z] >>> [apiv2][query] GET https://serviceusage.googleapis.com/v1/projects/ghostrecon-9c294/services/firebasedataconnect.googleapis.com [none]
+[debug] [2026-02-26T06:08:58.740Z] >>> [apiv2][(partial)header] GET https://serviceusage.googleapis.com/v1/projects/ghostrecon-9c294/services/firebasedataconnect.googleapis.com  x-goog-user-project=ghostrecon-9c294
+[debug] [2026-02-26T06:08:58.742Z] >>> [apiv2][query] GET https://serviceusage.googleapis.com/v1/projects/ghostrecon-9c294/services/sqladmin.googleapis.com [none]
+[debug] [2026-02-26T06:08:58.742Z] >>> [apiv2][(partial)header] GET https://serviceusage.googleapis.com/v1/projects/ghostrecon-9c294/services/sqladmin.googleapis.com  x-goog-user-project=ghostrecon-9c294
+[debug] [2026-02-26T06:09:00.576Z] <<< [apiv2][status] GET https://serviceusage.googleapis.com/v1/projects/ghostrecon-9c294/services/firebasedataconnect.googleapis.com 200
+[debug] [2026-02-26T06:09:00.577Z] <<< [apiv2][body] GET https://serviceusage.googleapis.com/v1/projects/ghostrecon-9c294/services/firebasedataconnect.googleapis.com [omitted]
+[warn] !  dataconnect: missing required API firebasedataconnect.googleapis.com. Enabling now... 
+[debug] [2026-02-26T06:09:00.577Z] Checked if tokens are valid: true, expires at: 1772089558046
+[debug] [2026-02-26T06:09:00.578Z] Checked if tokens are valid: true, expires at: 1772089558046
+[debug] [2026-02-26T06:09:00.578Z] >>> [apiv2][query] POST https://serviceusage.googleapis.com/v1/projects/ghostrecon-9c294/services/firebasedataconnect.googleapis.com:enable [none]
+[debug] [2026-02-26T06:09:00.578Z] >>> [apiv2][(partial)header] POST https://serviceusage.googleapis.com/v1/projects/ghostrecon-9c294/services/firebasedataconnect.googleapis.com:enable  x-goog-user-project=ghostrecon-9c294
+[debug] [2026-02-26T06:09:01.037Z] <<< [apiv2][status] POST https://serviceusage.googleapis.com/v1/projects/ghostrecon-9c294/services/firebasedataconnect.googleapis.com:enable 200
+[debug] [2026-02-26T06:09:01.037Z] <<< [apiv2][body] POST https://serviceusage.googleapis.com/v1/projects/ghostrecon-9c294/services/firebasedataconnect.googleapis.com:enable [omitted]
+[debug] [2026-02-26T06:09:02.688Z] <<< [apiv2][status] GET https://serviceusage.googleapis.com/v1/projects/ghostrecon-9c294/services/sqladmin.googleapis.com 200
+[debug] [2026-02-26T06:09:02.688Z] <<< [apiv2][body] GET https://serviceusage.googleapis.com/v1/projects/ghostrecon-9c294/services/sqladmin.googleapis.com [omitted]
+[warn] !  dataconnect: missing required API sqladmin.googleapis.com. Enabling now... 
+[debug] [2026-02-26T06:09:02.689Z] Checked if tokens are valid: true, expires at: 1772089558046
+[debug] [2026-02-26T06:09:02.689Z] Checked if tokens are valid: true, expires at: 1772089558046
+[debug] [2026-02-26T06:09:02.689Z] >>> [apiv2][query] POST https://serviceusage.googleapis.com/v1/projects/ghostrecon-9c294/services/sqladmin.googleapis.com:enable [none]
+[debug] [2026-02-26T06:09:02.689Z] >>> [apiv2][(partial)header] POST https://serviceusage.googleapis.com/v1/projects/ghostrecon-9c294/services/sqladmin.googleapis.com:enable  x-goog-user-project=ghostrecon-9c294
+[debug] [2026-02-26T06:09:04.318Z] <<< [apiv2][status] POST https://serviceusage.googleapis.com/v1/projects/ghostrecon-9c294/services/sqladmin.googleapis.com:enable 200
+[debug] [2026-02-26T06:09:04.318Z] <<< [apiv2][body] POST https://serviceusage.googleapis.com/v1/projects/ghostrecon-9c294/services/sqladmin.googleapis.com:enable [omitted]
+[debug] [2026-02-26T06:09:14.330Z] Checked if tokens are valid: true, expires at: 1772089558046
+[debug] [2026-02-26T06:09:14.330Z] Checked if tokens are valid: true, expires at: 1772089558046
+[debug] [2026-02-26T06:09:14.330Z] >>> [apiv2][query] GET https://firebasedataconnect.googleapis.com/v1/projects/ghostrecon-9c294/locations/-/services [none]
+[debug] [2026-02-26T06:09:16.486Z] <<< [apiv2][status] GET https://firebasedataconnect.googleapis.com/v1/projects/ghostrecon-9c294/locations/-/services 200
+[debug] [2026-02-26T06:09:16.486Z] <<< [apiv2][body] GET https://firebasedataconnect.googleapis.com/v1/projects/ghostrecon-9c294/locations/-/services {}
+[info] i  : ensuring required API cloudaicompanion.googleapis.com is enabled... 
+[debug] [2026-02-26T06:10:32.718Z] Checked if tokens are valid: true, expires at: 1772089558046
+[debug] [2026-02-26T06:10:32.718Z] Checked if tokens are valid: true, expires at: 1772089558046
+[debug] [2026-02-26T06:10:32.718Z] >>> [apiv2][query] GET https://serviceusage.googleapis.com/v1/projects/ghostrecon-9c294/services/cloudaicompanion.googleapis.com [none]
+[debug] [2026-02-26T06:10:32.718Z] >>> [apiv2][(partial)header] GET https://serviceusage.googleapis.com/v1/projects/ghostrecon-9c294/services/cloudaicompanion.googleapis.com  x-goog-user-project=ghostrecon-9c294
+[debug] [2026-02-26T06:10:43.895Z] <<< [apiv2][status] GET https://serviceusage.googleapis.com/v1/projects/ghostrecon-9c294/services/cloudaicompanion.googleapis.com 200
+[debug] [2026-02-26T06:10:43.895Z] <<< [apiv2][body] GET https://serviceusage.googleapis.com/v1/projects/ghostrecon-9c294/services/cloudaicompanion.googleapis.com [omitted]
+[info] +  : required API cloudaicompanion.googleapis.com is enabled 
+[debug] [2026-02-26T06:55:35.480Z] Checked if tokens are valid: false, expires at: 1772089558046
+[debug] [2026-02-26T06:55:35.480Z] Checked if tokens are valid: false, expires at: 1772089558046
+[debug] [2026-02-26T06:55:35.481Z] > refreshing access token with scopes: []
+[debug] [2026-02-26T06:55:35.482Z] >>> [apiv2][query] POST https://www.googleapis.com/oauth2/v3/token [none]
+[debug] [2026-02-26T06:55:35.482Z] >>> [apiv2][body] POST https://www.googleapis.com/oauth2/v3/token [omitted]
+[debug] [2026-02-26T06:55:35.669Z] <<< [apiv2][status] POST https://www.googleapis.com/oauth2/v3/token 200
+[debug] [2026-02-26T06:55:35.669Z] <<< [apiv2][body] POST https://www.googleapis.com/oauth2/v3/token [omitted]
+[debug] [2026-02-26T06:55:35.681Z] >>> [apiv2][query] GET https://cloudbilling.googleapis.com/v1/projects/ghostrecon-9c294/billingInfo [none]
+[debug] [2026-02-26T06:55:37.125Z] <<< [apiv2][status] GET https://cloudbilling.googleapis.com/v1/projects/ghostrecon-9c294/billingInfo 200
+[debug] [2026-02-26T06:55:37.125Z] <<< [apiv2][body] GET https://cloudbilling.googleapis.com/v1/projects/ghostrecon-9c294/billingInfo {"name":"projects/ghostrecon-9c294/billingInfo","projectId":"ghostrecon-9c294","billingAccountName":"","billingEnabled":false}
+[debug] [2026-02-26T06:55:37.126Z] Checked if tokens are valid: true, expires at: 1772092534669
+[debug] [2026-02-26T06:55:37.126Z] Checked if tokens are valid: true, expires at: 1772092534669
+[debug] [2026-02-26T06:55:37.126Z] >>> [apiv2][query] GET https://monitoring.googleapis.com/v3/projects/ghostrecon-9c294/timeSeries/ filter=metric.type%3D%22serviceruntime.googleapis.com%2Fquota%2Fallocation%2Fusage%22+AND+metric.label.quota_metric+%3D+%22sqladmin.googleapis.com%2Ffdc_lifetime_free_trial_per_project%22&interval.endTime=2026-02-26T06%3A55%3A37.126Z&interval.startTime=2026-02-19T06%3A55%3A37.125Z
+[debug] [2026-02-26T06:55:38.139Z] <<< [apiv2][status] GET https://monitoring.googleapis.com/v3/projects/ghostrecon-9c294/timeSeries/ 200
+[debug] [2026-02-26T06:55:38.139Z] <<< [apiv2][body] GET https://monitoring.googleapis.com/v3/projects/ghostrecon-9c294/timeSeries/ {"unit":"1"}
+[info] +  dataconnect: Detected existing apps android\app (android), ios (ios), . (web), android (web) 

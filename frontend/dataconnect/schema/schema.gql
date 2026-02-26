@@ -1,0 +1,32 @@
+type User @table {
+  firebaseAuthId: String!
+  username: String!
+  createdAt: Timestamp!
+  email: String
+  profilePictureUrl: String
+}
+
+type Message @table {
+  content: String!
+  createdAt: Timestamp!
+  chat: Chat
+  sender: User
+}
+
+type Chat @table {
+  name: String!
+  createdAt: Timestamp!
+  lastMessageAt: Timestamp
+  chatType: ChatType
+}
+
+type ChatMember @table(key: ["chat", "user"]) {
+  joinedAt: Timestamp!
+  lastReadMessageAt: Timestamp
+  chat: Chat!
+  user: User!
+}
+
+type ChatType @table {
+  name: String!
+}

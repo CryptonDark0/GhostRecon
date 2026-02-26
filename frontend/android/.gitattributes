@@ -1,3 +1,0 @@
-# Ensure Gradle wrapper JAR is treated as binary
-gradle/wrapper/gradle-wrapper.jar binary
-*.jar binary
