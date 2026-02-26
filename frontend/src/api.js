@@ -1,4 +1,4 @@
-// src/api.js
+// frontend/src/api.js
 import { auth, db } from "../firebaseConfig";
 import {
   signInAnonymously,
@@ -72,7 +72,7 @@ export function subscribeMessages(chatId, callback) {
   });
 }
 
-// Token storage (in memory for now)
+// Token storage
 let _authToken = null;
 
 export async function setToken(token) {
