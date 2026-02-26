@@ -6,38 +6,22 @@ import {
 import { useRouter } from 'expo-router';
 import { Fingerprint, ChevronLeft } from 'lucide-react-native';
 import { COLORS } from '../src/constants';
-import { apiCall, setToken, setUser } from '../src/api';
+import { registerAnonymous } from '../src/auth'; // MODIFIED: Use direct Firebase auth
 
 export default function RegisterAnonymous() {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [alias, setAlias] = useState('');
 
-  const generateFingerprint = () => {
-    const chars = 'abcdef0123456789';
-    let fp = '';
-    for (let i = 0; i < 32; i++) fp += chars[Math.floor(Math.random() * chars.length)];
-    return fp;
-  };
-
   const handleRegister = async () => {
     setLoading(true);
     try {
-      const fingerprint = generateFingerprint();
-      const res = await apiCall('/auth/register/anonymous', {
-        method: 'POST',
-        body: JSON.stringify({
-          device_fingerprint: fingerprint,
-          alias: alias.trim() || undefined,
-        }),
-      });
-      await setToken(res.token);
-      await setUser(res.user);
-      // Seed data for demo
-      try { await apiCall('/seed', { method: 'POST' }); } catch {}
+      // MODIFIED: Call the correct registration function from auth.ts
+      await registerAnonymous(alias.trim());
+      // On success, navigate home
       router.replace('/home');
     } catch (err: any) {
-      Alert.alert('Error', err.message);
+      Alert.alert('Registration Error', err.message);
     } finally {
       setLoading(false);
     }
@@ -83,14 +67,7 @@ export default function RegisterAnonymous() {
 
           <View style={styles.aliasBox}>
             <Text style={styles.aliasLabel}>CODENAME (OPTIONAL)</Text>
-            <View style={styles.aliasInput}>
-              <Text
-                style={styles.aliasInputText}
-                // @ts-ignore - using Text as display, TextInput below
-              >
-                {alias || 'Auto-generated Ghost ID'}
-              </Text>
-            </View>
+            {/* This faux-input is purely for display */}
             <View style={styles.inputRow}>
               <View style={styles.textInputWrapper}>
                 <RNTextInput
@@ -210,19 +187,6 @@ const styles = StyleSheet.create({
     fontFamily: 'monospace',
     letterSpacing: 1,
     marginBottom: 8,
-  },
-  aliasInput: {
-    backgroundColor: COLORS.gunmetal,
-    borderWidth: 1,
-    borderColor: COLORS.border_subtle,
-    padding: 12,
-    borderRadius: 2,
-    display: 'none',
-  },
-  aliasInputText: {
-    color: COLORS.stealth_grey,
-    fontSize: 14,
-    fontFamily: 'monospace',
   },
   inputRow: { marginBottom: 0 },
   textInputWrapper: {
