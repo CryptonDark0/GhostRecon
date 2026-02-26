@@ -1,0 +1,39 @@
+{
+  "project_info": {
+    "project_number": "325419022469",
+    "project_id": "ghostrecon-9c294",
+    "storage_bucket": "ghostrecon-9c294.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:325419022469:android:af51cbc29eb0f3056811ec",
+        "android_client_info": {
+          "package_name": "com.sonsofunity.ghostrecon"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "325419022469-ih1p68mga47tbvscng2bnh0c4naham1b.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAjDb4nzPFmfCFwWhNBt_O7laL28iPtfKQ"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "325419022469-ih1p68mga47tbvscng2bnh0c4naham1b.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
