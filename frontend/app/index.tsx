@@ -13,9 +13,9 @@ const { width } = Dimensions.get('window');
 
 export default function OnboardingScreen() {
   const router = useRouter();
-  const [fadeAnim] = useState(new Animated.Value(0));
-  const [slideAnim] = useState(new Animated.Value(50));
-  const [glowAnim] = useState(new Animated.Value(0.3));
+  const [fadeAnim] = useState(new Animated.Value([0]));
+  const [slideAnim] = useState(new Animated.Value([50]));
+  const [glowAnim] = useState(new Animated.Value([0.3]));
 
   const checkAuth = async () => {
     const token = await getToken();
