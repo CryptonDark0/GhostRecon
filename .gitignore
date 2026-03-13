@@ -1,0 +1,22 @@
+# Node / Firebase
+node_modules/
+.env
+.firebase/
+functions/node_modules/
+lib/
+dist/
+build/
+
+# Android build outputs
+android/app/build/
+android/.gradle/
+android/.idea/
+
+# iOS build outputs
+ios/Pods/
+ios/build/
+ios/.idea/
+
+# Misc
+*.log
+.DS_Store
