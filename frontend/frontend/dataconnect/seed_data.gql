@@ -1,0 +1,117 @@
+mutation SeedData @transaction @auth(level: USER, insecureReason: "Seed data is for development and testing purposes and should not be exposed in production without proper access control.") {
+  directChatType: chatType_upsert(
+    data: { id: "00000000-0000-0000-0000-000000000001", name: "Direct Message" }
+  )
+  groupChatType: chatType_upsert(
+    data: { id: "00000000-0000-0000-0000-000000000002", name: "Group Chat" }
+  )
+
+  user1: user_upsert(
+    data: {
+      id: "10000000-0000-0000-0000-000000000001"
+      firebaseAuthId: "firebaseuid1"
+      username: "Alice"
+      email: "alice@example.com"
+      createdAt: "2024-01-01T10:00:00Z"
+    }
+  )
+  user2: user_upsert(
+    data: {
+      id: "10000000-0000-0000-0000-000000000002"
+      firebaseAuthId: "firebaseuid2"
+      username: "Bob"
+      email: "bob@example.com"
+      createdAt: "2024-01-01T10:05:00Z"
+    }
+  )
+  user3: user_upsert(
+    data: {
+      id: "10000000-0000-0000-0000-000000000003"
+      firebaseAuthId: "firebaseuid3"
+      username: "Charlie"
+      email: "charlie@example.com"
+      createdAt: "2024-01-01T10:10:00Z"
+    }
+  )
+
+  chat1: chat_upsert(
+    data: {
+      id: "20000000-0000-0000-0000-000000000001"
+      name: "Alice & Bob Chat"
+      createdAt: "2024-01-01T10:15:00Z"
+      chatTypeId: "00000000-0000-0000-0000-000000000001" # Direct Message
+    }
+  )
+  chat2: chat_upsert(
+    data: {
+      id: "20000000-0000-0000-0000-000000000002"
+      name: "Group Alpha"
+      createdAt: "2024-01-01T10:20:00Z"
+      chatTypeId: "00000000-0000-0000-0000-000000000002" # Group Chat
+    }
+  )
+
+  chatMember1: chatMember_upsert(
+    data: {
+      chatId: "20000000-0000-0000-0000-000000000001"
+      userId: "10000000-0000-0000-0000-000000000001"
+      joinedAt: "2024-01-01T10:15:00Z"
+    }
+  )
+  chatMember2: chatMember_upsert(
+    data: {
+      chatId: "20000000-0000-0000-0000-000000000001"
+      userId: "10000000-0000-0000-0000-000000000002"
+      joinedAt: "2024-01-01T10:15:00Z"
+    }
+  )
+  chatMember3: chatMember_upsert(
+    data: {
+      chatId: "20000000-0000-0000-0000-000000000002"
+      userId: "10000000-0000-0000-0000-000000000001"
+      joinedAt: "2024-01-01T10:20:00Z"
+    }
+  )
+  chatMember4: chatMember_upsert(
+    data: {
+      chatId: "20000000-0000-0000-0000-000000000002"
+      userId: "10000000-0000-0000-0000-000000000002"
+      joinedAt: "2024-01-01T10:20:00Z"
+    }
+  )
+  chatMember5: chatMember_upsert(
+    data: {
+      chatId: "20000000-0000-0000-0000-000000000002"
+      userId: "10000000-0000-0000-0000-000000000003"
+      joinedAt: "2024-01-01T10:20:00Z"
+    }
+  )
+
+  message1: message_upsert(
+    data: {
+      id: "30000000-0000-0000-0000-000000000001"
+      chatId: "20000000-0000-0000-0000-000000000001"
+      senderId: "10000000-0000-0000-0000-000000000001"
+      content: "Hey Bob, how are you?"
+      createdAt: "2024-01-01T10:25:00Z"
+    }
+  )
+  message2: message_upsert(
+    data: {
+      id: "30000000-0000-0000-0000-000000000002"
+      chatId: "20000000-0000-0000-0000-000000000001"
+      senderId: "10000000-0000-0000-0000-000000000002"
+      content: "I'm good Alice, thanks! How about you?"
+      createdAt: "2024-01-01T10:26:00Z"
+    }
+  )
+  message3: message_upsert(
+    data: {
+      id: "30000000-0000-0000-0000-000000000003"
+      chatId: "20000000-0000-0000-0000-000000000002"
+      senderId: "10000000-0000-0000-0000-000000000001"
+      content: "Welcome everyone to Group Alpha!"
+      createdAt: "2024-01-01T10:30:00Z"
+    }
+  )
+}

@@ -20,6 +20,12 @@ export const SPACING = {
   xl: 32,
 };
 
+// Tactical Limits (Global Standard)
+export const STORAGE_LIMITS = {
+  NORMAL_GB: 5,
+  PREMIUM_GB: 20
+};
+
 const BACKEND_URL = process.env.EXPO_PUBLIC_BACKEND_URL;
 
 export const API_BASE = `${BACKEND_URL}/api`;

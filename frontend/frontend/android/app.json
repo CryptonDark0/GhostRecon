@@ -1,0 +1,18 @@
+{
+  "android": {
+    "package": "com.satish8.frontend"
+  },
+  "extra": {
+    "eas": {
+      "projectId": "ea1d9cde-444b-4c74-8a87-02e3cc058212"
+    }
+  },
+  "expo": {
+    "ios": {
+      "bundleIdentifier": "com.satish8.frontend",
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      }
+    }
+  }
+}

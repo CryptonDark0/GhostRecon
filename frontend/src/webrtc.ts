@@ -1,155 +1,167 @@
-import { apiCall, getToken } from './api';
-import { API_BASE } from './constants';
+import { db } from './firebase';
+import {
+  collection,
+  doc,
+  setDoc,
+  onSnapshot,
+  addDoc,
+  updateDoc,
+  getDoc,
+  serverTimestamp
+} from "firebase/firestore";
 
 // WebRTC configuration
-let peerConnection: RTCPeerConnection | null = null;
-let localStream: MediaStream | null = null;
-let remoteStream: MediaStream | null = null;
+let peerConnection: any = null;
+let localStream: any = null;
+let remoteStream: any = null;
+let onRemoteStreamUpdate: ((stream: any) => void) | null = null;
 
-export interface RTCConfig {
-  iceServers: Array<{ urls: string | string[] }>;
-  iceCandidatePoolSize: number;
-}
+const rtcConfig = {
+  iceServers: [
+    { urls: 'stun:stun.l.google.com:19302' },
+    { urls: 'stun:stun1.l.google.com:19302' },
+    { urls: 'stun:stun2.l.google.com:19302' },
+  ],
+  iceCandidatePoolSize: 10,
+};
 
-export async function getWebRTCConfig(): Promise<RTCConfig> {
+const getRTC = async () => {
   try {
-    return await apiCall('/webrtc/config');
-  } catch {
-    return {
-      iceServers: [
-        { urls: 'stun:stun.l.google.com:19302' },
-        { urls: 'stun:stun1.l.google.com:19302' },
-      ],
-      iceCandidatePoolSize: 10,
-    };
+    return await import('react-native-webrtc');
+  } catch (e) {
+    console.warn("WebRTC not available in this environment.");
+    return null;
   }
+};
+
+export const setOnRemoteStreamUpdate = (callback: (stream: any) => void) => {
+  onRemoteStreamUpdate = callback;
+};
+
+export async function startLocalStream(isVideo: boolean) {
+  const rtc = await getRTC();
+  if (!rtc) return null;
+
+  const constraints = {
+    audio: true,
+    video: isVideo ? { facingMode: 'user' } : false,
+  };
+
+  localStream = await rtc.mediaDevices.getUserMedia(constraints);
+  return localStream;
 }
 
-export async function initializeCall(
-  callId: string,
-  isVideo: boolean,
-  onRemoteStream: (stream: MediaStream) => void,
-  onIceCandidate: (candidate: string) => void
-): Promise<MediaStream | null> {
-  try {
-    // Dynamic import for react-native-webrtc (only available in dev builds)
-    const {
-      RTCPeerConnection,
-      RTCSessionDescription,
-      RTCIceCandidate,
-      mediaDevices,
-    } = await import('react-native-webrtc');
+export async function createCall(targetUserId: string, callerId: string, isVideo: boolean) {
+  const rtc = await getRTC();
+  if (!rtc) return null;
 
-    const config = await getWebRTCConfig();
-    peerConnection = new RTCPeerConnection(config);
+  const callDoc = doc(collection(db, "calls"));
+  const offerCandidates = collection(callDoc, "offerCandidates");
+  const answerCandidates = collection(callDoc, "answerCandidates");
 
-    // Get local media
-    const constraints = {
-      audio: true,
-      video: isVideo ? { facingMode: 'user', width: 640, height: 480 } : false,
-    };
+  peerConnection = new rtc.RTCPeerConnection(rtcConfig);
 
-    localStream = await mediaDevices.getUserMedia(constraints);
-
-    // Add tracks to peer connection
+  if (localStream) {
     localStream.getTracks().forEach((track: any) => {
-      if (peerConnection && localStream) {
-        peerConnection.addTrack(track, localStream);
+      peerConnection.addTrack(track, localStream);
+    });
+  }
+
+  peerConnection.ontrack = (event: any) => {
+    if (event.streams && event.streams[0]) {
+      remoteStream = event.streams[0];
+      if (onRemoteStreamUpdate) onRemoteStreamUpdate(remoteStream);
+    }
+  };
+
+  peerConnection.onicecandidate = (event: any) => {
+    if (event.candidate) {
+      addDoc(offerCandidates, event.candidate.toJSON());
+    }
+  };
+
+  const offerDescription = await peerConnection.createOffer();
+  await peerConnection.setLocalDescription(offerDescription);
+
+  const offer = { sdp: offerDescription.sdp, type: offerDescription.type };
+
+  await setDoc(callDoc, {
+    offer,
+    callerId,
+    targetUserId,
+    isVideo,
+    status: 'dialing',
+    createdAt: serverTimestamp()
+  });
+
+  onSnapshot(callDoc, (snapshot) => {
+    const data = snapshot.data();
+    if (!peerConnection.currentRemoteDescription && data?.answer) {
+      const answerDescription = new rtc.RTCSessionDescription(data.answer);
+      peerConnection.setRemoteDescription(answerDescription);
+    }
+  });
+
+  onSnapshot(answerCandidates, (snapshot) => {
+    snapshot.docChanges().forEach((change) => {
+      if (change.type === "added") {
+        const candidate = new rtc.RTCIceCandidate(change.doc.data());
+        peerConnection.addIceCandidate(candidate);
       }
     });
+  });
 
-    // Handle remote stream
-    peerConnection.ontrack = (event: any) => {
-      if (event.streams && event.streams[0]) {
-        remoteStream = event.streams[0];
-        onRemoteStream(event.streams[0]);
-      }
-    };
-
-    // Handle ICE candidates
-    peerConnection.onicecandidate = (event: any) => {
-      if (event.candidate) {
-        onIceCandidate(JSON.stringify(event.candidate));
-      }
-    };
-
-    return localStream;
-  } catch (err) {
-    console.log('[WebRTC] Not available (Expo Go). Use EAS build for real calls:', err);
-    return null;
-  }
+  return callDoc.id;
 }
 
-export async function createOffer(callId: string): Promise<string | null> {
-  if (!peerConnection) return null;
-  try {
-    const { RTCSessionDescription } = await import('react-native-webrtc');
-    const offer = await peerConnection.createOffer({});
-    await peerConnection.setLocalDescription(offer);
+export async function joinCall(callId: string) {
+  const rtc = await getRTC();
+  if (!rtc) return;
 
-    // Send offer via signaling server
-    await apiCall('/calls/signal', {
-      method: 'POST',
-      body: JSON.stringify({
-        call_id: callId,
-        signal_type: 'offer',
-        signal_data: JSON.stringify(offer),
-      }),
+  const callDoc = doc(db, "calls", callId);
+  const offerCandidates = collection(callDoc, "offerCandidates");
+  const answerCandidates = collection(callDoc, "answerCandidates");
+
+  peerConnection = new rtc.RTCPeerConnection(rtcConfig);
+
+  if (localStream) {
+    localStream.getTracks().forEach((track: any) => {
+      peerConnection.addTrack(track, localStream);
     });
-
-    return JSON.stringify(offer);
-  } catch (err) {
-    console.log('[WebRTC] Create offer error:', err);
-    return null;
   }
-}
 
-export async function handleAnswer(answerSdp: string): Promise<void> {
-  if (!peerConnection) return;
-  try {
-    const { RTCSessionDescription } = await import('react-native-webrtc');
-    const answer = JSON.parse(answerSdp);
-    await peerConnection.setRemoteDescription(new RTCSessionDescription(answer));
-  } catch (err) {
-    console.log('[WebRTC] Handle answer error:', err);
-  }
-}
+  peerConnection.ontrack = (event: any) => {
+    if (event.streams && event.streams[0]) {
+      remoteStream = event.streams[0];
+      if (onRemoteStreamUpdate) onRemoteStreamUpdate(remoteStream);
+    }
+  };
 
-export async function handleOffer(callId: string, offerSdp: string): Promise<string | null> {
-  if (!peerConnection) return null;
-  try {
-    const { RTCSessionDescription } = await import('react-native-webrtc');
-    const offer = JSON.parse(offerSdp);
-    await peerConnection.setRemoteDescription(new RTCSessionDescription(offer));
+  peerConnection.onicecandidate = (event: any) => {
+    if (event.candidate) {
+      addDoc(answerCandidates, event.candidate.toJSON());
+    }
+  };
 
-    const answer = await peerConnection.createAnswer();
-    await peerConnection.setLocalDescription(answer);
+  const callSnap = await getDoc(callDoc);
+  const callData = callSnap.data();
+  if (!callData) return;
 
-    await apiCall('/calls/signal', {
-      method: 'POST',
-      body: JSON.stringify({
-        call_id: callId,
-        signal_type: 'answer',
-        signal_data: JSON.stringify(answer),
-      }),
+  await peerConnection.setRemoteDescription(new rtc.RTCSessionDescription(callData.offer));
+
+  const answerDescription = await peerConnection.createAnswer();
+  await peerConnection.setLocalDescription(answerDescription);
+
+  const answer = { type: answerDescription.type, sdp: answerDescription.sdp };
+  await updateDoc(callDoc, { answer, status: 'connected' });
+
+  onSnapshot(offerCandidates, (snapshot) => {
+    snapshot.docChanges().forEach((change) => {
+      if (change.type === "added") {
+        peerConnection.addIceCandidate(new rtc.RTCIceCandidate(change.doc.data()));
+      }
     });
-
-    return JSON.stringify(answer);
-  } catch (err) {
-    console.log('[WebRTC] Handle offer error:', err);
-    return null;
-  }
-}
-
-export async function addIceCandidate(candidateStr: string): Promise<void> {
-  if (!peerConnection) return;
-  try {
-    const { RTCIceCandidate } = await import('react-native-webrtc');
-    const candidate = JSON.parse(candidateStr);
-    await peerConnection.addIceCandidate(new RTCIceCandidate(candidate));
-  } catch (err) {
-    console.log('[WebRTC] Add ICE candidate error:', err);
-  }
+  });
 }
 
 export function endCall(): void {
@@ -162,12 +174,8 @@ export function endCall(): void {
     peerConnection = null;
   }
   remoteStream = null;
+  onRemoteStreamUpdate = null;
 }
 
-export function getLocalStream(): MediaStream | null {
-  return localStream;
-}
-
-export function getRemoteStream(): MediaStream | null {
-  return remoteStream;
-}
+export function getLocalStream() { return localStream; }
+export function getRemoteStream() { return remoteStream; }

@@ -1,85 +1,95 @@
 // frontend/src/api.js
-import { auth, db } from "../firebaseConfig";
-import {
-  signInAnonymously,
-  createUserWithEmailAndPassword,
-  signInWithEmailAndPassword
-} from "firebase/auth";
-import {
-  doc,
-  setDoc,
-  getDoc,
-  collection,
-  addDoc,
-  query,
-  onSnapshot,
-  orderBy
-} from "firebase/firestore";
+import { auth, db } from "./firebase";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import { doc, getDoc, setDoc, deleteDoc } from "firebase/firestore";
+import { deleteUser } from "firebase/auth";
 
-// Simple API call test
-export async function apiCall() {
-  return "Firebase SDK connected ✅";
-}
-
-// Register anonymous user
-export async function registerAnonymous() {
-  const userCredential = await signInAnonymously(auth);
-  return userCredential.user.uid;
-}
-
-// Register with email/password
-export async function registerUser(email, password) {
-  const userCredential = await createUserWithEmailAndPassword(auth, email, password);
-  await setUser(userCredential.user.uid, email);
-  return userCredential.user.uid;
-}
-
-// Login with email/password
-export async function loginUser(email, password) {
-  const userCredential = await signInWithEmailAndPassword(auth, email, password);
-  return userCredential.user.uid;
-}
-
-// Save user profile
-export async function setUser(uid, email) {
-  await setDoc(doc(db, "users", uid), {
-    email,
-    createdAt: new Date()
-  });
-}
-
-// Get user profile
-export async function getUser(uid) {
-  const userDoc = await getDoc(doc(db, "users", uid));
-  return userDoc.exists() ? userDoc.data() : null;
-}
-
-// Send a message
-export async function sendMessage(chatId, text, userId) {
-  await addDoc(collection(db, "chats", chatId, "messages"), {
-    text,
-    userId,
-    timestamp: new Date()
-  });
-}
-
-// Subscribe to messages
-export function subscribeMessages(chatId, callback) {
-  const q = query(collection(db, "chats", chatId, "messages"), orderBy("timestamp"));
-  return onSnapshot(q, (snapshot) => {
-    const messages = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-    callback(messages);
-  });
-}
-
-// Token storage
-let _authToken = null;
-
+/**
+ * TOKEN MANAGEMENT
+ */
 export async function setToken(token) {
-  _authToken = token;
-  return token;
+  try {
+    await AsyncStorage.setItem("ghost_recon_token", token);
+    return token;
+  } catch (e) {
+    console.error("Token save failed:", e);
+    return null;
+  }
 }
 
 export async function getToken() {
-  return _authToken;
+  try {
+    return await AsyncStorage.getItem("ghost_recon_token");
+  } catch (e) {
+    return null;
+  }
+}
+
+export async function clearToken() {
+  try {
+    await AsyncStorage.removeItem("ghost_recon_token");
+  } catch (e) {}
+}
+
+/**
+ * IDENTITY DESTRUCTION (WIPE)
+ * Permanently deletes user from Auth and Firestore, releasing the codename.
+ */
+export async function destroyIdentity() {
+  const user = auth.currentUser;
+  if (!user) throw new Error("No active session found.");
+
+  try {
+    console.log("[GHOST-WIPE] Initiating document purge for UID:", user.uid);
+
+    // 1. Delete Firestore Profile first
+    const userDocRef = doc(db, "users", user.uid);
+    await deleteDoc(userDocRef);
+    console.log("[GHOST-WIPE] Firestore document erased.");
+
+    // 2. Delete Firebase Auth User
+    // NOTE: This may fail if the user hasn't logged in recently (Security feature)
+    await deleteUser(user);
+    console.log("[GHOST-WIPE] Auth identity terminated.");
+
+    // 3. Clear local storage
+    await clearToken();
+
+    return true;
+  } catch (e) {
+    console.error("[GHOST-WIPE] Purge failed:", e);
+
+    if (e.code === 'auth/requires-recent-login') {
+      throw new Error("SENSITIVE ACTION: Please sign out and sign back in before deleting your account.");
+    }
+
+    throw e;
+  }
+}
+
+/**
+ * USER PROFILE HELPERS
+ */
+export async function getUser(uid) {
+  if (!uid && auth.currentUser) uid = auth.currentUser.uid;
+  if (!uid) return null;
+
+  try {
+    const userDoc = await getDoc(doc(db, "users", uid));
+    return userDoc.exists() ? userDoc.data() : null;
+  } catch (e) {
+    console.error("Profile fetch failed:", e);
+    return null;
+  }
+}
+
+export async function apiCall(endpoint) {
+  console.log(`[Firebase Link] Bypass legacy API for: ${endpoint}`);
+  return { success: true };
+}
+
+export async function setUser(uid, data) {
+  try {
+    await setDoc(doc(db, "users", uid), data, { merge: true });
+  } catch (e) {}
 }

@@ -5,7 +5,7 @@ import {
 import { useRouter } from 'expo-router';
 import { ChevronLeft, AlertTriangle, Trash2 } from 'lucide-react-native';
 import { COLORS } from '../src/constants';
-import { apiCall, clearAuth } from '../src/api';
+import { destroyIdentity } from '../src/api';
 
 export default function PanicWipeScreen() {
   const router = useRouter();
@@ -16,14 +16,15 @@ export default function PanicWipeScreen() {
   const handleWipe = async () => {
     setLoading(true);
     try {
-      await apiCall('/security/panic-wipe', {
-        method: 'POST',
-        body: JSON.stringify({ confirm_code: 'WIPE-CONFIRM' }),
-      });
+      // PERMANENTLY DESTROY IDENTITY
+      // This deletes the user from Auth and Firestore, releasing the codename.
+      await destroyIdentity();
       setWiped(true);
-      await clearAuth();
     } catch (err: any) {
-      Alert.alert('Error', err.message);
+      console.error(err);
+      // If re-authentication is required, Firebase might throw an error.
+      // For anonymous users, this is rare, but for email/pass it might happen.
+      Alert.alert('Protocol Error', 'Identity destruction requires recent authentication. Re-login and try again.');
     } finally {
       setLoading(false);
     }
@@ -34,17 +35,16 @@ export default function PanicWipeScreen() {
       <SafeAreaView style={styles.container}>
         <View style={styles.wipedContent}>
           <Trash2 size={64} color={COLORS.critical_red} />
-          <Text style={styles.wipedTitle}>DATA DESTROYED</Text>
+          <Text style={styles.wipedTitle}>IDENTITY PURGED</Text>
           <Text style={styles.wipedText}>
-            All messages, conversations, contacts,{'\n'}and call history have been permanently wiped.
+            Your tactical profile, codename, and all secure{'\n'}data have been permanently erased from the network.
           </Text>
           <TouchableOpacity
-            testID="return-btn"
             style={styles.returnBtn}
             onPress={() => router.replace('/')}
             activeOpacity={0.7}
           >
-            <Text style={styles.returnBtnText}>EXIT</Text>
+            <Text style={styles.returnBtnText}>EXIT SYSTEM</Text>
           </TouchableOpacity>
         </View>
       </SafeAreaView>
@@ -54,11 +54,11 @@ export default function PanicWipeScreen() {
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
-        <TouchableOpacity testID="back-btn" onPress={() => router.back()} activeOpacity={0.7}>
+        <TouchableOpacity onPress={() => router.back()} activeOpacity={0.7} style={styles.backBtn}>
           <ChevronLeft size={24} color={COLORS.ghost_white} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>PANIC WIPE</Text>
-        <View style={{ width: 24 }} />
+        <View style={{ width: 40 }} />
       </View>
 
       <View style={styles.content}>
@@ -68,31 +68,29 @@ export default function PanicWipeScreen() {
 
         <Text style={styles.title}>EMERGENCY WIPE</Text>
         <Text style={styles.subtitle}>
-          This action will permanently destroy ALL data:{'\n\n'}
-          {'\u2022'} All encrypted messages{'\n'}
-          {'\u2022'} All conversation history{'\n'}
-          {'\u2022'} All contacts and trust network{'\n'}
-          {'\u2022'} All call records{'\n\n'}
-          This action CANNOT be undone.
+          This action will permanently DESTROY your identity:{'\n\n'}
+          {'\u2022'} Delete your profile from the cloud{'\n'}
+          {'\u2022'} Release your CODENAME for others{'\n'}
+          {'\u2022'} Wipe all encryption keys{'\n'}
+          {'\u2022'} Terminate all active links{'\n\n'}
+          This action IS IRREVERSIBLE.
         </Text>
 
         {step === 0 && (
           <TouchableOpacity
-            testID="wipe-step1-btn"
             style={styles.wipeBtn}
             onPress={() => setStep(1)}
             activeOpacity={0.7}
           >
             <AlertTriangle size={18} color={COLORS.ghost_white} />
-            <Text style={styles.wipeBtnText}>INITIATE WIPE PROTOCOL</Text>
+            <Text style={styles.wipeBtnText}>INITIATE DESTRUCTION</Text>
           </TouchableOpacity>
         )}
 
         {step === 1 && (
           <View style={styles.confirmArea}>
-            <Text style={styles.confirmText}>ARE YOU ABSOLUTELY SURE?</Text>
+            <Text style={styles.confirmText}>CONFIRM PURGE?</Text>
             <TouchableOpacity
-              testID="wipe-confirm-btn"
               style={styles.finalWipeBtn}
               onPress={handleWipe}
               disabled={loading}
@@ -103,12 +101,11 @@ export default function PanicWipeScreen() {
               ) : (
                 <>
                   <Trash2 size={18} color={COLORS.ghost_white} />
-                  <Text style={styles.finalWipeBtnText}>CONFIRM DESTRUCTION</Text>
+                  <Text style={styles.finalWipeBtnText}>PURGE IDENTITY</Text>
                 </>
               )}
             </TouchableOpacity>
             <TouchableOpacity
-              testID="wipe-cancel-btn"
               style={styles.cancelBtn}
               onPress={() => setStep(0)}
               activeOpacity={0.7}
@@ -125,10 +122,10 @@ export default function PanicWipeScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: COLORS.void_black },
   header: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    paddingHorizontal: 16, paddingVertical: 16,
-    borderBottomWidth: 1, borderBottomColor: COLORS.armour_grey,
+    height: 60, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    paddingHorizontal: 16, borderBottomWidth: 1, borderBottomColor: COLORS.armour_grey,
   },
+  backBtn: { padding: 8 },
   headerTitle: { color: COLORS.critical_red, fontSize: 14, fontWeight: '700', fontFamily: 'monospace', letterSpacing: 2 },
   content: { flex: 1, paddingHorizontal: 24, paddingTop: 48, alignItems: 'center' },
   warningIcon: { marginBottom: 24 },

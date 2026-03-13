@@ -1,39 +1,54 @@
-# Learn more https://docs.github.com/en/get-started/getting-started-with-git/ignoring-files
+# GhostRecon Tactical Suite - Safe Gitignore
 
-# dependencies
+# Dependencies
 node_modules/
+/node_modules
+.yarn/
 
-# Expo
+# Expo & Metro
 .expo/
 dist/
 web-build/
 expo-env.d.ts
+.metro-health-check*
 
-# Native
-.kotlin/
-*.orig.*
+# Firebase Sensitive Config (Android/iOS)
+# DO NOT UPLOAD THESE TO GITHUB
+google-services.json
+GoogleService-Info.plist
+*token.json*
+*credentials.json*
+
+# Environment & Private Keys
+.env
+.env.*
+*.local
+*.key
+*.pem
 *.jks
 *.p8
 *.p12
-*.key
 *.mobileprovision
 
-# Metro
-.metro-health-check*
+# Native Build Folders
+android/build/
+android/.gradle/
+ios/build/
+ios/Pods/
 
-# debug
-npm-debug.*
-yarn-debug.*
-yarn-error.*
+# IDE & Editors
+.idea/
+.vscode/
+*.swp
+*.swo
 
-# macOS
+# Debug & Logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+firebase-debug.log*
+.cache/
+
+# System Files
 .DS_Store
-*.pem
-
-# local env files
-.env*.local
-
-# typescript
-*.tsbuildinfo
-
-app-example
+Thumbs.db
