@@ -144,7 +144,7 @@ export default function ChatDetail() {
 
       await addDoc(collection(db, "conversations", id, "messages"), {
         conversation_id: id, sender_id: currentUser!.uid, sender_alias: senderAlias,
-        content: `[INITIATED ${callType.toUpperCase()} CALL]`, type: 'system',
+        content: `[OUTGOING ${callType.toUpperCase()} CALL]`, type: 'system',
         created_at: serverTimestamp()
       });
     } catch (e) {}

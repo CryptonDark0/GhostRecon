@@ -7,7 +7,8 @@ import {
   addDoc,
   updateDoc,
   getDoc,
-  serverTimestamp
+  serverTimestamp,
+  deleteDoc
 } from "firebase/firestore";
 import { Platform } from 'react-native';
 
@@ -55,7 +56,11 @@ export async function startLocalStream(isVideo: boolean) {
 
   const constraints = {
     audio: true,
-    video: isVideo ? { facingMode: 'user' } : false,
+    video: isVideo ? {
+      facingMode: 'user',
+      width: { min: 640, ideal: 1280 },
+      height: { min: 480, ideal: 720 }
+    } : false,
   };
 
   try {
@@ -113,7 +118,7 @@ export async function createCall(targetUserId: string, callerId: string, isVideo
 
   onSnapshot(callDoc, (snapshot) => {
     const data = snapshot.data();
-    if (!peerConnection.currentRemoteDescription && data?.answer) {
+    if (peerConnection && !peerConnection.currentRemoteDescription && data?.answer) {
       const answerDescription = new provider.RTCSessionDescription(data.answer);
       peerConnection.setRemoteDescription(answerDescription);
     }
@@ -121,9 +126,9 @@ export async function createCall(targetUserId: string, callerId: string, isVideo
 
   onSnapshot(answerCandidates, (snapshot) => {
     snapshot.docChanges().forEach((change) => {
-      if (change.type === "added") {
+      if (change.type === "added" && peerConnection) {
         const candidate = new provider.RTCIceCandidate(change.doc.data());
-        peerConnection.addIceCandidate(candidate);
+        peerConnection.addIceCandidate(candidate).catch(e => console.error("Error adding ice candidate", e));
       }
     });
   });
@@ -175,8 +180,8 @@ export async function joinCall(callId: string) {
 
   onSnapshot(offerCandidates, (snapshot) => {
     snapshot.docChanges().forEach((change) => {
-      if (change.type === "added") {
-        peerConnection.addIceCandidate(new provider.RTCIceCandidate(change.doc.data()));
+      if (change.type === "added" && peerConnection) {
+        peerConnection.addIceCandidate(new provider.RTCIceCandidate(change.doc.data())).catch(e => console.error(e));
       }
     });
   });

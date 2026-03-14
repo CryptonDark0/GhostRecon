@@ -1,7 +1,7 @@
 import { Platform } from 'react-native';
 import * as Device from 'expo-device';
 import { auth, db } from './firebase';
-import { doc, updateDoc } from 'firebase/firestore';
+import { doc, setDoc } from 'firebase/firestore';
 
 /**
  * SECURE PUSH HANDSHAKE
@@ -57,15 +57,15 @@ export async function registerForPushNotifications(): Promise<string | null> {
     });
     const token = tokenData.data;
 
-    // ⚡ CRITICAL: Link token to User Profile for incoming calls
+    // ⚡ CRITICAL: Use setDoc with merge to prevent Permission Denied on new users
     const user = auth.currentUser;
     if (user && token) {
       const userRef = doc(db, "users", user.uid);
-      await updateDoc(userRef, {
+      await setDoc(userRef, {
         pushToken: token,
         deviceType: Platform.OS,
         lastOnline: new Date().toISOString()
-      });
+      }, { merge: true });
       console.log(`[GHOST-NOTIF] Tactical link established for ${Platform.OS}.`);
     }
 

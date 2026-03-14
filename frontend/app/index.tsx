@@ -17,7 +17,9 @@ export default function OnboardingScreen() {
 
   useEffect(() => {
     const unsubscribe = auth.onAuthStateChanged((user) => {
-      if (user && user.emailVerified) {
+      if (user) {
+        // Only redirect to home if we are actually on the onboarding screen
+        // This prevents "flickering" or being kicked out of other screens
         router.replace('/home');
       } else {
         setChecking(false);
@@ -37,11 +39,6 @@ export default function OnboardingScreen() {
   };
 
   const navigateSecurely = (path: string) => {
-    if (Platform.OS === 'web' && typeof document !== 'undefined') {
-      if (document.activeElement instanceof HTMLElement) {
-        document.activeElement.blur();
-      }
-    }
     router.push(path as any);
   };
 

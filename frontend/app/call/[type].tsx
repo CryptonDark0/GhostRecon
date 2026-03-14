@@ -8,6 +8,7 @@ import { COLORS } from '../../src/constants';
 import { auth, db } from '../../src/firebase';
 import { doc, getDoc, onSnapshot, updateDoc } from 'firebase/firestore';
 import { startLocalStream, createCall, joinCall, endCall as endRtcCall, getLocalStream, setOnRemoteStreamUpdate } from '../../src/webrtc';
+import { Audio } from 'expo-av';
 
 let RTCView: any = null;
 if (Platform.OS !== 'web') {
@@ -32,15 +33,21 @@ export default function CallScreen() {
   const [targetAlias, setTargetAlias] = useState('Agent');
   const [remoteStream, setRemoteStream] = useState<any>(null);
 
+  const dialTone = useRef<Audio.Sound | null>(null);
+
   useEffect(() => {
     setupCall();
-    if (Platform.OS !== 'web') {
-      setOnRemoteStreamUpdate((stream) => {
-        setRemoteStream(stream);
-        setCallStatus('connected');
-      });
-    }
-    return () => { if (Platform.OS !== 'web') endRtcCall(); };
+
+    setOnRemoteStreamUpdate((stream) => {
+      setRemoteStream(stream);
+      setCallStatus('connected');
+      stopDialTone(); // Stop dialing sound when connected
+    });
+
+    return () => {
+      stopDialTone();
+      endRtcCall();
+    };
   }, []);
 
   useEffect(() => {
@@ -49,57 +56,121 @@ export default function CallScreen() {
     return () => clearInterval(interval);
   }, [callStatus]);
 
+  const playDialTone = async () => {
+    try {
+      // Use a direct .mp3 link that doesn't block hotlinking
+      const { sound } = await Audio.Sound.createAsync(
+        { uri: 'https://www.soundjay.com/phone/phone-calling-1.mp3' },
+        { isLooping: true, shouldPlay: true, volume: 0.3 }
+      );
+      dialTone.current = sound;
+    } catch (e) {
+      console.log("Dial tone failed to load", e);
+    }
+  };
+
+  const stopDialTone = async () => {
+    if (dialTone.current) {
+      try { await dialTone.current.stopAsync(); await dialTone.current.unloadAsync(); } catch (e) {}
+      dialTone.current = null;
+    }
+  };
+
   const setupCall = async () => {
     if (!auth.currentUser || !target) return;
     try {
       const targetSnap = await getDoc(doc(db, "users", target));
       if (targetSnap.exists()) setTargetAlias(targetSnap.data().alias);
 
+      await startLocalStream(isVideo);
+
       if (!callId) {
-        if (Platform.OS !== 'web') {
-          await startLocalStream(isVideo);
-          const newId = await createCall(target, auth.currentUser.uid, isVideo);
-          if (newId) { setCallId(newId); listenToCall(newId); }
-        } else { setCallStatus('calling'); }
-      } else {
-        if (Platform.OS !== 'web') {
-          await startLocalStream(isVideo);
-          await joinCall(callId);
+        setCallStatus('calling');
+        playDialTone(); // Start dial tone for the caller
+        const newId = await createCall(target, auth.currentUser.uid, isVideo);
+        if (newId) {
+          setCallId(newId);
+          listenToCall(newId);
         }
+      } else {
+        await joinCall(callId);
         listenToCall(callId);
       }
-    } catch (err) { router.back(); }
+    } catch (err) {
+      console.error("Call setup failed:", err);
+      router.back();
+    }
   };
 
   const listenToCall = (id: string) => {
     return onSnapshot(doc(db, "calls", id), (snapshot) => {
       const data = snapshot.data();
       if (!data) return;
-      if (data.status === 'ended') setTimeout(() => router.back(), 1000);
-      if (data.status === 'connected') setCallStatus('connected');
+      if (data.status === 'ended') {
+        setCallStatus('ended');
+        stopDialTone();
+        setTimeout(() => router.back(), 1500);
+      }
+      if (data.status === 'connected') {
+        setCallStatus('connected');
+        stopDialTone();
+      }
+    }, (error) => {
+      console.error("Snapshot error:", error);
     });
   };
 
   const handleEndCall = async () => {
-    if (callId) await updateDoc(doc(db, "calls", callId), { status: 'ended' });
-    if (Platform.OS !== 'web') endRtcCall();
+    if (callId) {
+      try {
+        await updateDoc(doc(db, "calls", callId), { status: 'ended' });
+      } catch (e) {
+        console.error("Failed to end call in DB", e);
+      }
+    }
+    stopDialTone();
+    endRtcCall();
     router.back();
   };
 
-  const toggleSpeaker = () => {
-    if (Platform.OS !== 'web') {
-      const { InCallManager } = require('react-native-webrtc');
-      InCallManager.setForceSpeakerphoneOn(!speaker);
-    }
+  const toggleSpeaker = async () => {
     setSpeaker(!speaker);
+    if (Platform.OS !== 'web') {
+      try {
+        const { InCallManager } = require('react-native-webrtc');
+        InCallManager.setSpeakerphoneOn(!speaker);
+      } catch (e) {}
+    }
   };
 
   return (
     <SafeAreaView style={styles.container}>
-      {isVideo && callStatus === 'connected' && Platform.OS !== 'web' && RTCView && (
+      {isVideo && callStatus === 'connected' && (
         <View style={styles.videoContainer}>
-          {remoteStream && <RTCView streamURL={remoteStream.toURL()} style={styles.remoteVideo} objectFit="cover" />}
-          {!videoOff && getLocalStream() && <RTCView streamURL={getLocalStream()!.toURL()} style={styles.localVideo} objectFit="cover" />}
+          {Platform.OS === 'web' ? (
+             <video
+               autoPlay
+               playsInline
+               ref={(el) => { if (el && remoteStream) el.srcObject = remoteStream; }}
+               style={styles.webRemoteVideo as any}
+             />
+          ) : (
+            RTCView && remoteStream && <RTCView streamURL={remoteStream.toURL()} style={styles.remoteVideo} objectFit="cover" />
+          )}
+
+          {!videoOff && getLocalStream() && (
+            Platform.OS === 'web' ? (
+              <video
+                autoPlay
+                muted
+                playsInline
+                ref={(el) => { if (el) el.srcObject = getLocalStream(); }}
+                style={styles.webLocalVideo as any}
+              />
+            ) : (
+              RTCView && <RTCView streamURL={getLocalStream()!.toURL()} style={styles.localVideo} objectFit="cover" />
+            )
+          )}
         </View>
       )}
 
@@ -112,7 +183,9 @@ export default function CallScreen() {
         <View style={styles.content}>
           <Text style={styles.agentName}>{targetAlias}</Text>
           <Text style={styles.callStatusText}>
-            {callStatus === 'connecting' ? 'ESTABLISHING...' : callStatus === 'calling' ? 'DIALING...' :
+            {callStatus === 'connecting' ? 'ESTABLISHING...' :
+             callStatus === 'calling' ? `OUTGOING ${isVideo ? 'VIDEO' : 'AUDIO'} CALL` :
+             callStatus === 'ended' ? 'LINK TERMINATED' :
              `${Math.floor(duration/60).toString().padStart(2,'0')}:${(duration%60).toString().padStart(2,'0')}`}
           </Text>
         </View>
@@ -143,7 +216,9 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#050505' },
   videoContainer: { ...StyleSheet.absoluteFillObject },
   remoteVideo: { flex: 1 },
+  webRemoteVideo: { width: '100%', height: '100%', objectFit: 'cover' },
   localVideo: { position: 'absolute', right: 20, top: 100, width: 100, height: 150, borderRadius: 8, borderWidth: 1, borderColor: COLORS.terminal_green },
+  webLocalVideo: { position: 'absolute', right: 20, top: 100, width: 120, height: 160, borderRadius: 8, border: `1px solid ${COLORS.terminal_green}`, objectFit: 'cover' },
   overlay: { flex: 1, justifyContent: 'space-between', paddingVertical: 40 },
   securityBanner: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingVertical: 10, backgroundColor: 'rgba(0,255,65,0.1)' },
   securityText: { color: COLORS.terminal_green, fontSize: 10, fontWeight: '700', fontFamily: 'monospace' },

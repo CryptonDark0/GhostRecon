@@ -5,7 +5,7 @@ import { useEffect, useRef, useState } from 'react';
 import { registerForPushNotifications } from '../src/notifications';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { auth, db } from '../src/firebase';
-import { collection, query, where, onSnapshot, doc, updateDoc } from 'firebase/firestore';
+import { collection, query, where, onSnapshot, doc, updateDoc, getDoc } from 'firebase/firestore';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Shield, Phone, PhoneOff, Video, VideoOff } from 'lucide-react-native';
 import { COLORS } from '../src/constants';
@@ -23,6 +23,7 @@ export default function RootLayout() {
 
   // Incoming Call State
   const [incomingCall, setIncomingCall] = useState<any>(null);
+  const [callerAlias, setCallerAlias] = useState('AGENT');
   const ringtoneSound = useRef<Audio.Sound | null>(null);
 
   useEffect(() => {
@@ -43,18 +44,21 @@ export default function RootLayout() {
     try {
       await stopRingtone();
       const { sound } = await Audio.Sound.createAsync(
-        { uri: 'https://cdn.pixabay.com/download/audio/2022/03/15/audio_78396636aa.mp3' },
-        { isLooping: true, shouldPlay: true }
+        { uri: 'https://cdn.pixabay.com/download/audio/2022/03/15/audio_78396636aa.mp3' }, // Modern digital ringtone
+        { isLooping: true, shouldPlay: true, volume: 1.0 }
       );
       ringtoneSound.current = sound;
     } catch (error) {
-      console.log("Audio Handshake failed.");
+      console.log("Audio Handshake failed:", error);
     }
   };
 
   const stopRingtone = async () => {
     if (ringtoneSound.current) {
-      try { await ringtoneSound.current.stopAsync(); await ringtoneSound.current.unloadAsync(); } catch (e) {}
+      try {
+        await ringtoneSound.current.stopAsync();
+        await ringtoneSound.current.unloadAsync();
+      } catch (e) {}
       ringtoneSound.current = null;
     }
   };
@@ -91,17 +95,34 @@ export default function RootLayout() {
 
   useEffect(() => {
     if (!isReady) return;
-    if (Platform.OS !== 'web') registerForPushNotifications();
+
+    // Register for notifications on load
+    registerForPushNotifications();
+
     let unsubscribeCalls: () => void;
 
     const setupCallListener = () => {
       const user = auth.currentUser;
       if (!user) return;
-      const q = query(collection(db, "calls"), where("targetUserId", "==", user.uid), where("status", "==", "dialing"));
-      unsubscribeCalls = onSnapshot(q, (snapshot) => {
-        snapshot.docChanges().forEach((change) => {
+
+      // Listen for incoming calls targeted at ME
+      const q = query(
+        collection(db, "calls"),
+        where("targetUserId", "==", user.uid),
+        where("status", "==", "dialing")
+      );
+
+      unsubscribeCalls = onSnapshot(q, async (snapshot) => {
+        for (const change of snapshot.docChanges()) {
           if (change.type === "added") {
             const callData = change.doc.data();
+
+            // Resolve Caller Alias
+            const callerSnap = await getDoc(doc(db, "users", callData.callerId));
+            if (callerSnap.exists()) {
+              setCallerAlias(callerSnap.data().alias || 'UNKNOWN AGENT');
+            }
+
             setIncomingCall({ id: change.doc.id, ...callData });
             playRingtone();
           } else if (change.type === "modified") {
@@ -110,16 +131,31 @@ export default function RootLayout() {
               setIncomingCall(null);
               stopRingtone();
             }
+          } else if (change.type === "removed") {
+             setIncomingCall(null);
+             stopRingtone();
           }
-        });
-      }, () => {});
+        }
+      }, (err) => {
+        console.error("Call listener error:", err);
+      });
     };
 
     const authUnsubscribe = auth.onAuthStateChanged((user) => {
-      if (user) setupCallListener();
-      else if (unsubscribeCalls) unsubscribeCalls();
+      if (user) {
+        setupCallListener();
+      } else {
+        if (unsubscribeCalls) unsubscribeCalls();
+        setIncomingCall(null);
+        stopRingtone();
+      }
     });
-    return () => { authUnsubscribe(); if (unsubscribeCalls) unsubscribeCalls(); };
+
+    return () => {
+      authUnsubscribe();
+      if (unsubscribeCalls) unsubscribeCalls();
+      stopRingtone();
+    };
   }, [isReady]);
 
   const respondToCall = async (accept: boolean) => {
@@ -128,13 +164,23 @@ export default function RootLayout() {
     const isVideo = incomingCall.isVideo;
     const callerId = incomingCall.callerId;
 
+    const currentCall = incomingCall;
     setIncomingCall(null);
     await stopRingtone();
 
     if (accept) {
-      router.push(`/call/${isVideo ? 'video' : 'voice'}?id=${callId}&target=${callerId}`);
+      // Navigate to the call screen
+      router.push({
+        pathname: `/call/${isVideo ? 'video' : 'voice'}`,
+        params: { id: callId, target: callerId }
+      });
     } else {
-      await updateDoc(doc(db, "calls", callId), { status: 'ended' });
+      // Reject the call
+      await updateDoc(doc(db, "calls", callId), {
+        status: 'ended',
+        endedReason: 'declined',
+        endedAt: new Date().toISOString()
+      });
     }
   };
 
@@ -145,20 +191,46 @@ export default function RootLayout() {
       <StatusBar style="light" />
       <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: '#050505' }, animation: 'fade' }} />
 
-      {/* 🛡️ INCOMING CALL OVERLAY */}
-      <Modal visible={!!incomingCall} transparent animationType="slide">
+      {/* 🛡️ INCOMING CALL OVERLAY (MESSENGER STYLE) */}
+      <Modal
+        visible={!!incomingCall}
+        transparent
+        animationType="slide"
+        statusBarTranslucent
+      >
         <View style={styles.callOverlay}>
-          <Shield size={48} color={COLORS.terminal_green} />
-          <Text style={styles.callTitle}>INCOMING SECURE LINK</Text>
-          <Text style={styles.callSub}>{incomingCall?.isVideo ? 'VIDEO' : 'VOICE'} HANDSHAKE REQUESTED</Text>
+          <View style={styles.callContent}>
+            <View style={styles.iconCircle}>
+              <Shield size={40} color={COLORS.terminal_green} />
+            </View>
 
-          <View style={styles.callActions}>
-            <TouchableOpacity style={[styles.callBtn, {backgroundColor: COLORS.critical_red}]} onPress={() => respondToCall(false)}>
-              <PhoneOff color="#FFF" size={28} />
-            </TouchableOpacity>
-            <TouchableOpacity style={[styles.callBtn, {backgroundColor: COLORS.terminal_green}]} onPress={() => respondToCall(true)}>
-              {incomingCall?.isVideo ? <Video color="#000" size={28} /> : <Phone color="#000" size={28} />}
-            </TouchableOpacity>
+            <Text style={styles.incomingText}>INCOMING SECURE LINK</Text>
+            <Text style={styles.callerName}>{callerAlias}</Text>
+            <Text style={styles.callType}>
+              INCOMING {incomingCall?.isVideo ? 'VIDEO' : 'AUDIO'} CALL
+            </Text>
+
+            <View style={styles.callActions}>
+              <View style={styles.actionItem}>
+                <TouchableOpacity
+                  style={[styles.callBtn, {backgroundColor: COLORS.critical_red}]}
+                  onPress={() => respondToCall(false)}
+                >
+                  <PhoneOff color="#FFF" size={32} />
+                </TouchableOpacity>
+                <Text style={styles.btnLabel}>DECLINE</Text>
+              </View>
+
+              <View style={styles.actionItem}>
+                <TouchableOpacity
+                  style={[styles.callBtn, {backgroundColor: COLORS.terminal_green}]}
+                  onPress={() => respondToCall(true)}
+                >
+                  {incomingCall?.isVideo ? <Video color="#000" size={32} /> : <Phone color="#000" size={32} />}
+                </TouchableOpacity>
+                <Text style={styles.btnLabel}>ACCEPT</Text>
+              </View>
+            </View>
           </View>
         </View>
       </Modal>
@@ -179,9 +251,16 @@ const styles = StyleSheet.create({
   privacyOverlay: { ...StyleSheet.absoluteFillObject, backgroundColor: '#050505', zIndex: 9999, alignItems: 'center', justifyContent: 'center', gap: 20 },
   privacyText: { color: '#00FF41', fontSize: 14, fontWeight: '900', fontFamily: 'monospace', letterSpacing: 4 },
   privacySubtext: { color: '#525252', fontSize: 8, fontFamily: 'monospace' },
-  callOverlay: { flex: 1, backgroundColor: 'rgba(5,5,5,0.95)', alignItems: 'center', justifyContent: 'center', gap: 30 },
-  callTitle: { color: COLORS.terminal_green, fontSize: 18, fontWeight: '900', fontFamily: 'monospace', letterSpacing: 2 },
-  callSub: { color: '#FFF', fontSize: 10, fontFamily: 'monospace' },
-  callActions: { flexDirection: 'row', gap: 60, marginTop: 40 },
-  callBtn: { width: 70, height: 70, borderRadius: 35, alignItems: 'center', justifyContent: 'center' }
+
+  // Call Overlay Styles
+  callOverlay: { flex: 1, backgroundColor: 'rgba(5,5,5,0.98)', justifyContent: 'center' },
+  callContent: { alignItems: 'center', padding: 20 },
+  iconCircle: { width: 100, height: 100, borderRadius: 50, backgroundColor: 'rgba(0,255,65,0.1)', alignItems: 'center', justifyContent: 'center', marginBottom: 30, borderWidth: 1, borderColor: 'rgba(0,255,65,0.3)' },
+  incomingText: { color: COLORS.terminal_green, fontSize: 12, fontFamily: 'monospace', letterSpacing: 2, marginBottom: 10 },
+  callerName: { color: '#FFF', fontSize: 32, fontWeight: '900', fontFamily: 'monospace', marginBottom: 5 },
+  callType: { color: '#888', fontSize: 10, fontFamily: 'monospace', letterSpacing: 1 },
+  callActions: { flexDirection: 'row', gap: 60, marginTop: 80 },
+  actionItem: { alignItems: 'center', gap: 15 },
+  callBtn: { width: 75, height: 75, borderRadius: 37.5, alignItems: 'center', justifyContent: 'center', elevation: 10, shadowColor: '#000', shadowOffset: { width: 0, height: 5 }, shadowOpacity: 0.3, shadowRadius: 5 },
+  btnLabel: { color: '#FFF', fontSize: 10, fontWeight: 'bold', fontFamily: 'monospace' }
 });
