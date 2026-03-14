@@ -29,14 +29,14 @@ export default function OnboardingScreen() {
   }, []);
 
   const startAnimations = () => {
+    const useNativeDriver = Platform.OS !== 'web';
     Animated.parallel([
-      Animated.timing(fadeAnim, { toValue: 1, duration: 1200, useNativeDriver: Platform.OS !== 'web' }),
-      Animated.timing(slideAnim, { toValue: 0, duration: 1000, useNativeDriver: Platform.OS !== 'web' }),
+      Animated.timing(fadeAnim, { toValue: 1, duration: 1200, useNativeDriver }),
+      Animated.timing(slideAnim, { toValue: 0, duration: 1000, useNativeDriver }),
     ]).start();
   };
 
   const navigateSecurely = (path: string) => {
-    // 🛡️ Web Accessibility Fix: Clear focus before navigation to prevent aria-hidden errors
     if (Platform.OS === 'web' && typeof document !== 'undefined') {
       if (document.activeElement instanceof HTMLElement) {
         document.activeElement.blur();

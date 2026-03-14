@@ -1,7 +1,7 @@
 // frontend/src/api.js
 import { auth, db } from "./firebase";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { doc, getDoc, setDoc, deleteDoc } from "firebase/firestore";
+import { doc, getDoc, setDoc, deleteDoc, collection, query, where, getDocs, writeBatch } from "firebase/firestore";
 import { deleteUser, signOut } from "firebase/auth";
 
 const PROFILE_CACHE_KEY = 'ghostrecon_user_profile';
@@ -46,21 +46,26 @@ export async function destroyIdentity() {
   const uid = user.uid;
 
   try {
-    console.log("[GHOST-WIPE] Initiating identity termination for UID:", uid);
+    console.log("[GHOST-WIPE] Initiating atomic purge for UID:", uid);
 
-    // 1. Delete Firestore Profile FIRST ⚡
-    // This releases the 'alias_lowercase' immediately so it can be reused.
+    // 1. Delete all user conversations/messages (Optional but thorough for "DESTRUCTION")
+    const convsQuery = query(collection(db, "conversations"), where("participants", "array-contains", uid));
+    const convsSnap = await getDocs(convsQuery);
+    const batch = writeBatch(db);
+    convsSnap.forEach((d) => batch.delete(d.ref));
+    await batch.commit();
+
+    // 2. DELETE FIRESTORE PROFILE
     const userDocRef = doc(db, "users", uid);
     await deleteDoc(userDocRef);
-    console.log("[GHOST-WIPE] Firestore document erased. Alias released.");
+    console.log("[GHOST-WIPE] Firestore profile erased. Alias released.");
 
-    // 2. Delete Firebase Auth User
+    // 3. DELETE AUTH ACCOUNT
     try {
       await deleteUser(user);
       console.log("[GHOST-WIPE] Auth identity terminated.");
     } catch (authErr) {
       if (authErr.code === 'auth/requires-recent-login') {
-        // Doc is gone, but user needs to re-auth to finish. Log out to reset.
         await signOut(auth);
         await clearToken();
         throw new Error("SENSITIVE ACTION: Final authorization required. Sign out and back in to finalize.");
@@ -68,13 +73,13 @@ export async function destroyIdentity() {
       throw authErr;
     }
 
-    // 3. Clear all local device data
+    // 4. WIPE ALL LOCAL CACHE
     await clearToken();
     await AsyncStorage.clear();
 
     return true;
   } catch (e) {
-    console.error("[GHOST-WIPE] Purge failed:", e);
+    console.error("[GHOST-WIPE] Fatal Failure:", e);
     throw e;
   }
 }

@@ -90,25 +90,29 @@ export default function ChatDetail() {
     return () => timeouts.forEach(t => clearTimeout(t));
   }, [messages]);
 
-  const handleSend = async (type: string = 'text', mediaData: any = null) => {
-    if ((!input.trim() && !mediaData) || !currentUser || !id) return;
+  const handleSendMessage = async (type: string = 'text', mediaUrl: string | null = null, fileSize: number = 0, filePath: string | null = null) => {
+    if ((!input.trim() && !mediaUrl) || !currentUser || !id) return;
+    const text = input.trim();
+    if (type === 'text') setInput('');
+    setTypingStatus(id, currentUser.uid, false);
 
     try {
       const userDoc = await getDoc(doc(db, "users", currentUser.uid));
-      const alias = userDoc.exists() ? userDoc.data().alias : 'Ghost';
+      const senderAlias = userDoc.exists() ? userDoc.data().alias : 'Ghost';
 
-      await sendMessage(id, currentUser.uid, alias, input.trim(), {
-        type,
-        fileUrl: mediaData?.url || null,
-        filePath: mediaData?.path || null,
-        fileSize: mediaData?.size || 0,
-        self_destruct_seconds: selfDestruct
+      await addDoc(collection(db, "conversations", id, "messages"), {
+        conversation_id: id, sender_id: currentUser.uid, sender_alias: senderAlias,
+        content: text, type, fileUrl: mediaUrl, filePath, fileSize, created_at: serverTimestamp(),
+        self_destruct_seconds: selfDestruct,
+        hiddenFor: [],
+        reactions: {}
       });
 
-      if (type === 'text') setInput('');
-    } catch (err) {
-      Alert.alert("Link Failed", "Handshake interrupted.");
-    }
+      await updateDoc(doc(db, "conversations", id), {
+        lastMessageAt: serverTimestamp(),
+        lastMessage: type === 'text' ? text : `[Tactical ${type}]`
+      });
+    } catch (err) { Alert.alert("Link Failed", "Handshake failed."); }
   };
 
   const pickMedia = async (mode: 'image' | 'file') => {
@@ -124,18 +128,15 @@ export default function ChatDetail() {
       if (!result.canceled && result.assets[0]) {
         setSendingMedia(true);
         const media = await uploadMedia(currentUser.uid, result.assets[0].uri, mode, setUploadProgress);
-        await handleSend(mode, media);
+        await handleSendMessage(mode, media.url, media.size, media.path);
       }
-    } catch (e: any) { Alert.alert("Error", "Media dispatch failed."); }
+    } catch (e: any) { Alert.alert("Handshake Error", "Media dispatch failed."); }
     finally { setSendingMedia(false); setUploadProgress(0); }
   };
 
   const handleCall = async (type: 'voice' | 'video') => {
     if (!targetAgent || !id) return;
-
-    // Log call start in chat history
-    await handleSend('text', { content: `[${type.toUpperCase()} CALL STARTED]` });
-
+    await handleSendMessage('text', null, 0, null); // Dummy trigger for call node if needed
     router.push(`/call/${type}?target=${targetAgent.uid}`);
   };
 
@@ -170,7 +171,12 @@ export default function ChatDetail() {
         style={[styles.msgRow, isMine && styles.msgRowMine]}
       >
         <View style={[styles.msgBubble, isMine ? styles.msgBubbleMine : styles.msgBubbleOther]}>
-          {!isMine && <Text style={styles.msgSender}>{item.sender_alias}</Text>}
+          {!isMine && (
+            <View style={styles.senderHeader}>
+              <View style={[styles.statusIndicator, { backgroundColor: targetAgent?.isOnline ? COLORS.terminal_green : COLORS.critical_red }]} />
+              <Text style={styles.msgSender}>{item.sender_alias}</Text>
+            </View>
+          )}
           {item.type === 'image' ? (
             <Image source={{ uri: item.fileUrl }} style={styles.msgImage} resizeMode="contain" />
           ) : item.type === 'file' ? (
@@ -201,8 +207,11 @@ export default function ChatDetail() {
       <View style={styles.header}>
         <TouchableOpacity onPress={() => router.replace('/home')} style={styles.headerBtn}><ChevronLeft size={24} color="#FFF" /></TouchableOpacity>
         <View style={styles.headerCenter}>
-          <Text style={styles.headerTitle}>{targetAgent?.alias?.toUpperCase() || "AGENT"}</Text>
-          <Text style={[styles.headerStatus, { color: targetAgent?.isOnline ? COLORS.terminal_green : COLORS.muted_text }]}>
+          <View style={styles.nameRow}>
+            <View style={[styles.statusIndicatorHeader, { backgroundColor: targetAgent?.isOnline ? COLORS.terminal_green : COLORS.critical_red }]} />
+            <Text style={styles.headerTitle}>{targetAgent?.alias?.toUpperCase() || "AGENT"}</Text>
+          </View>
+          <Text style={[styles.headerStatus, { color: targetAgent?.isOnline ? COLORS.terminal_green : COLORS.critical_red }]}>
             {typingAgents.length > 0 ? "AGENT COMPOSING..." : (targetAgent?.isOnline ? "SECURE LINK ACTIVE" : "OFFLINE")}
           </Text>
         </View>
@@ -268,6 +277,8 @@ const styles = StyleSheet.create({
   header: { flexDirection: 'row', alignItems: 'center', padding: 16, borderBottomWidth: 1, borderBottomColor: '#222', backgroundColor: '#121212' },
   headerBtn: { padding: 8 },
   headerCenter: { flex: 1, marginLeft: 16 },
+  nameRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  statusIndicatorHeader: { width: 8, height: 8, borderRadius: 4 },
   headerTitle: { color: '#FFF', fontSize: 14, fontWeight: '900', fontFamily: 'monospace' },
   headerStatus: { fontSize: 8, fontFamily: 'monospace', marginTop: 2, letterSpacing: 1 },
   headerActions: { flexDirection: 'row', gap: 12 },
@@ -278,7 +289,9 @@ const styles = StyleSheet.create({
   msgBubble: { maxWidth: '85%', padding: 12, borderRadius: 2, position: 'relative' },
   msgBubbleMine: { backgroundColor: COLORS.terminal_green },
   msgBubbleOther: { backgroundColor: '#121212', borderLeftWidth: 3, borderLeftColor: COLORS.terminal_green },
-  msgSender: { color: COLORS.terminal_green, fontSize: 9, fontWeight: '700', marginBottom: 4, fontFamily: 'monospace' },
+  senderHeader: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 4 },
+  statusIndicator: { width: 6, height: 6, borderRadius: 3 },
+  msgSender: { color: COLORS.terminal_green, fontSize: 9, fontWeight: '700', fontFamily: 'monospace' },
   msgText: { color: '#FFF', fontSize: 14, lineHeight: 20 },
   msgTextMine: { color: '#000', fontWeight: '600' },
   msgImage: { width: 240, height: 240, borderRadius: 2, marginBottom: 8 },
