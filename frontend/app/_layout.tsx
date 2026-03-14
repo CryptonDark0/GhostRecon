@@ -88,6 +88,9 @@ export default function RootLayout() {
             }
           }
         });
+      }, (error) => {
+        // Silently handle listener errors during logout/deletion
+        console.log("[GHOST-LISTENERS] Call listener handshake closed.");
       });
     };
 

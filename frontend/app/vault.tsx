@@ -1,18 +1,18 @@
 import React, { useState, useEffect } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity, SafeAreaView,
-  FlatList, Alert, Platform, Modal, ScrollView, ActivityIndicator, TextInput, Image
+  FlatList, Alert, Platform, Modal, ScrollView, ActivityIndicator, TextInput
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import {
   ChevronLeft, Lock, FileText, ShieldAlert, Plus, Trash2, X,
-  ShieldCheck, Eye, EyeOff, Key, Image as ImageIcon, Save, Download
+  ShieldCheck, Eye, EyeOff, Key, Image as ImageIcon, Save, Download, Crown
 } from 'lucide-react-native';
 import { COLORS, STORAGE_LIMITS } from '../src/constants';
 import { auth, db } from '../src/firebase';
 import {
   collection, query, orderBy, onSnapshot, addDoc,
-  deleteDoc, doc, serverTimestamp, getDoc
+  deleteDoc, doc, serverTimestamp
 } from 'firebase/firestore';
 import * as DocumentPicker from 'expo-document-picker';
 import * as ImagePicker from 'expo-image-picker';
@@ -57,8 +57,16 @@ export default function VaultScreen() {
     if (!currentUser) return;
 
     // Load user profile for subscription/storage info
-    const unsubProfile = onSnapshot(doc(db, "users", currentUser.uid), (doc) => {
-      if (doc.exists()) setUserProfile(doc.data());
+    const unsubProfile = onSnapshot(doc(db, "users", currentUser.uid), (docSnap) => {
+      if (docSnap.exists()) {
+        const data = docSnap.data();
+        setUserProfile(data);
+
+        // 🛡️ SECURITY GATE: If user is not subscribed, redirect them out of the vault
+        if (data.isSubscribed !== true) {
+          router.replace('/subscription');
+        }
+      }
     });
 
     const vaultRef = collection(db, "users", currentUser.uid, "vault");
@@ -134,7 +142,6 @@ export default function VaultScreen() {
         setUploadProgress(0);
         const asset = result.assets[0];
 
-        // Metadata scrubbing and optimized upload
         const media = await uploadMedia(currentUser.uid, asset.uri, uploadType, setUploadProgress);
 
         const vaultRef = collection(db, "users", currentUser.uid, "vault");
@@ -184,10 +191,7 @@ export default function VaultScreen() {
     setSelectedItem(item);
     setModalVisible(true);
     setShowPassword(false);
-
-    setTimeout(() => {
-      setIsDecrypting(false);
-    }, 1000);
+    setTimeout(() => setIsDecrypting(false), 1000);
   };
 
   const formatStorage = (bytes: number) => {
@@ -230,13 +234,18 @@ export default function VaultScreen() {
   const storageUsed = userProfile?.storageUsedBytes || 0;
   const storagePercent = Math.min((storageUsed / (storageLimit * 1024 * 1024 * 1024)) * 100, 100);
 
+  if (!userProfile?.isSubscribed && !loading) return null;
+
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
         <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
           <ChevronLeft size={24} color={COLORS.ghost_white} />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>SECURE VAULT</Text>
+        <View style={styles.headerTitleRow}>
+          <Crown size={14} color={COLORS.alert_amber} />
+          <Text style={styles.headerTitle}>ELITE VAULT</Text>
+        </View>
         <TouchableOpacity onPress={() => setAddModalVisible(true)} style={styles.addBtn}>
           <Plus size={24} color={COLORS.terminal_green} />
         </TouchableOpacity>
@@ -244,8 +253,8 @@ export default function VaultScreen() {
 
       <View style={styles.storageBarContainer}>
         <View style={styles.storageLabelRow}>
-          <Text style={styles.storageLabel}>STORAGE USAGE: {formatStorage(storageUsed)}</Text>
-          <Text style={styles.storageLabel}>{storageLimit}GB LIMIT</Text>
+          <Text style={styles.storageLabel}>SECURE STORAGE: {formatStorage(storageUsed)}</Text>
+          <Text style={styles.storageLabel}>{storageLimit}GB PREMIUM LIMIT</Text>
         </View>
         <View style={styles.progressBarBg}>
           <View style={[styles.progressBarFill, { width: `${storagePercent}%` }]} />
@@ -255,11 +264,11 @@ export default function VaultScreen() {
       <View style={styles.quickActions}>
         <TouchableOpacity style={styles.actionTab} onPress={() => handleFileUpload('image')}>
           <ImageIcon size={18} color={COLORS.terminal_green} />
-          <Text style={styles.actionTabText}>IMAGE</Text>
+          <Text style={styles.actionTabText}>UPLOAD INTEL</Text>
         </TouchableOpacity>
         <TouchableOpacity style={styles.actionTab} onPress={() => handleFileUpload('file')}>
           <FileText size={18} color={COLORS.terminal_green} />
-          <Text style={styles.actionTabText}>FILE</Text>
+          <Text style={styles.actionTabText}>STORE DATA</Text>
         </TouchableOpacity>
       </View>
 
@@ -444,6 +453,7 @@ const styles = StyleSheet.create({
   },
   backBtn: { position: 'absolute', left: 16, padding: 10 },
   addBtn: { position: 'absolute', right: 16, padding: 10 },
+  headerTitleRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   headerTitle: { color: COLORS.ghost_white, fontSize: 14, fontWeight: '700', fontFamily: 'monospace', letterSpacing: 2 },
   storageBarContainer: { padding: 16, backgroundColor: 'rgba(0,255,65,0.02)', borderBottomWidth: 1, borderBottomColor: COLORS.armour_grey },
   storageLabelRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8 },

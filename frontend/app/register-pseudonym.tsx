@@ -4,7 +4,7 @@ import {
   TextInput, ActivityIndicator, Alert, KeyboardAvoidingView, Platform, ScrollView, Keyboard
 } from 'react-native';
 import { useRouter } from 'expo-router';
-import { ChevronLeft, Shield } from 'lucide-react-native';
+import { ChevronLeft, Shield, Eye, EyeOff, Check, X } from 'lucide-react-native';
 import { COLORS } from '../src/constants';
 import { createUserWithEmailAndPassword, deleteUser, sendEmailVerification, signOut } from 'firebase/auth';
 import { doc, setDoc, serverTimestamp, collection, query, where, getDocs } from 'firebase/firestore';
@@ -19,6 +19,7 @@ export default function RegisterPseudonym() {
   const [alias, setAlias] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
 
   // ENSURE CLEAN STATE: Sign out any existing ghost session before starting
@@ -29,6 +30,19 @@ export default function RegisterPseudonym() {
     };
     clearSession();
   }, []);
+
+  const validatePassword = (pass: string) => {
+    return {
+      length: pass.length >= 6,
+      upper: /[A-Z]/.test(pass),
+      lower: /[a-z]/.test(pass),
+      number: /[0-9]/.test(pass),
+      special: /[!@#$%^&*(),.?":{}|<>]/.test(pass),
+    };
+  };
+
+  const passStatus = validatePassword(password);
+  const isPassValid = Object.values(passStatus).every(Boolean);
 
   const showAlert = (title: string, msg: string) => {
     if (Platform.OS === 'web') {
@@ -50,6 +64,11 @@ export default function RegisterPseudonym() {
 
     if (!ALIAS_REGEX.test(trimmedAlias)) {
       showAlert('Invalid Alias', 'Alias must be 3-20 characters (Alphanumeric, spaces, dots, or underscores only).');
+      return;
+    }
+
+    if (!isPassValid) {
+      showAlert('Security Violation', 'Passphrase does not meet tactical strength requirements.');
       return;
     }
 
@@ -119,6 +138,15 @@ export default function RegisterPseudonym() {
     }
   };
 
+  const Requirement = ({ label, met }: { label: string, met: boolean }) => (
+    <View style={styles.requirementRow}>
+      {met ? <Check size={12} color={COLORS.terminal_green} /> : <X size={12} color={COLORS.critical_red} />}
+      <Text style={[styles.requirementText, { color: met ? COLORS.terminal_green : COLORS.stealth_grey }]}>
+        {label}
+      </Text>
+    </View>
+  );
+
   return (
     <SafeAreaView style={styles.container}>
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.flex}>
@@ -167,20 +195,40 @@ export default function RegisterPseudonym() {
 
             <View style={styles.inputGroup}>
               <Text style={styles.label}>SECURITY PASSPHRASE</Text>
-              <TextInput
-                style={styles.input}
-                value={password}
-                onChangeText={setPassword}
-                placeholder="Minimum 8 characters"
-                placeholderTextColor="#444"
-                secureTextEntry
-                autoComplete="new-password"
-                id="pass-field"
-                {...Platform.select({ web: { name: 'password' } } as any)}
-              />
+              <View style={styles.passwordContainer}>
+                <TextInput
+                  style={[styles.input, { flex: 1, marginBottom: 0 }]}
+                  value={password}
+                  onChangeText={setPassword}
+                  placeholder="Tactical Passphrase"
+                  placeholderTextColor="#444"
+                  secureTextEntry={!showPassword}
+                  autoComplete="new-password"
+                  id="pass-field"
+                  {...Platform.select({ web: { name: 'password' } } as any)}
+                />
+                <TouchableOpacity
+                  onPress={() => setShowPassword(!showPassword)}
+                  style={styles.eyeBtn}
+                >
+                  {showPassword ? <EyeOff size={20} color={COLORS.terminal_green} /> : <Eye size={20} color={COLORS.terminal_green} />}
+                </TouchableOpacity>
+              </View>
+
+              <View style={styles.requirementsContainer}>
+                <Requirement label="At least 6 characters" met={passStatus.length} />
+                <Requirement label="Uppercase letter" met={passStatus.upper} />
+                <Requirement label="Lowercase letter" met={passStatus.lower} />
+                <Requirement label="Number" met={passStatus.number} />
+                <Requirement label="Special character" met={passStatus.special} />
+              </View>
             </View>
 
-            <TouchableOpacity style={styles.confirmBtn} onPress={handleRegister} disabled={loading}>
+            <TouchableOpacity
+              style={[styles.confirmBtn, (!isPassValid || loading) && { opacity: 0.6 }]}
+              onPress={handleRegister}
+              disabled={loading || !isPassValid}
+            >
               {loading ? <ActivityIndicator color="#000" /> : <Text style={styles.confirmBtnText}>AUTHORIZE IDENTITY</Text>}
             </TouchableOpacity>
           </View>
@@ -201,6 +249,11 @@ const styles = StyleSheet.create({
   inputGroup: { gap: 8 },
   label: { color: '#00FF41', fontSize: 10, fontWeight: '700', fontFamily: 'monospace' },
   input: { backgroundColor: '#0F0F0F', padding: 18, color: '#FFF', fontFamily: 'monospace', borderRadius: 2, borderWidth: 1, borderColor: '#333' },
+  passwordContainer: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#0F0F0F', borderRadius: 2, borderWidth: 1, borderColor: '#333' },
+  eyeBtn: { padding: 12 },
+  requirementsContainer: { marginTop: 8, gap: 4 },
+  requirementRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  requirementText: { fontSize: 10, fontFamily: 'monospace' },
   confirmBtn: { backgroundColor: '#00FF41', padding: 20, borderRadius: 2, alignItems: 'center', marginTop: 20, borderLeftWidth: 4, borderLeftColor: '#FFF' },
   confirmBtnText: { color: '#000', fontWeight: '900', letterSpacing: 2, fontSize: 14, fontFamily: 'monospace' },
 });

@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity, SafeAreaView,
-  FlatList, TextInput, KeyboardAvoidingView, Platform, ActivityIndicator, Alert, Image, Modal
+  FlatList, TextInput, KeyboardAvoidingView, Platform, ActivityIndicator, Alert, Image, Modal, Linking
 } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { ChevronLeft, Send, Lock, Phone, Video, ImageIcon, Paperclip, Clock, Trash2, ShieldAlert } from 'lucide-react-native';
@@ -120,7 +120,10 @@ export default function ChatDetail() {
     try {
       let result;
       if (mode === 'image') {
-        result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ImagePicker.MediaTypeOptions.Images, quality: 0.4 });
+        result = await ImagePicker.launchImageLibraryAsync({
+          mediaTypes: ImagePicker.MediaTypeOptions.Images,
+          quality: 0.8 // 🛡️ Optimized High Fidelity (Great balance)
+        });
       } else {
         result = await DocumentPicker.getDocumentAsync({ type: '*/*' });
       }
@@ -148,6 +151,13 @@ export default function ChatDetail() {
     } catch (e) { Alert.alert("Error", "Action blocked."); }
   };
 
+  const openNode = (url: string) => {
+    if (!url) return;
+    Linking.openURL(url).catch(() => {
+      Alert.alert("Handshake Error", "Could not open secure link.");
+    });
+  };
+
   const renderMessage = ({ item }: { item: any }) => {
     const isMine = item.sender_id === auth.currentUser?.uid;
     const reactions = Object.values(item.reactions || {});
@@ -156,19 +166,18 @@ export default function ChatDetail() {
       <TouchableOpacity
         activeOpacity={0.9}
         onLongPress={() => { setSelectedMsg(item); setMenuVisible(true); }}
+        onPress={() => item.fileUrl && openNode(item.fileUrl)}
         style={[styles.msgRow, isMine && styles.msgRowMine]}
       >
         <View style={[styles.msgBubble, isMine ? styles.msgBubbleMine : styles.msgBubbleOther]}>
           {!isMine && <Text style={styles.msgSender}>{item.sender_alias}</Text>}
           {item.type === 'image' ? (
-            <TouchableOpacity onPress={() => item.fileUrl && window.open(item.fileUrl, '_blank')}>
-              <Image source={{ uri: item.fileUrl }} style={styles.msgImage} resizeMode="contain" />
-            </TouchableOpacity>
+            <Image source={{ uri: item.fileUrl }} style={styles.msgImage} resizeMode="contain" />
           ) : item.type === 'file' ? (
-            <TouchableOpacity onPress={() => item.fileUrl && window.open(item.fileUrl, '_blank')} style={styles.fileBox}>
+            <View style={styles.fileBox}>
               <Paperclip size={16} color={isMine ? "#000" : COLORS.terminal_green} />
               <Text style={[styles.fileText, isMine && {color: "#000"}]}>TACTICAL_INTEL.DAT</Text>
-            </TouchableOpacity>
+            </View>
           ) : (
             <Text style={[styles.msgText, isMine && styles.msgTextMine]} selectable={false}>{item.content}</Text>
           )}
@@ -190,9 +199,7 @@ export default function ChatDetail() {
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.replace('/home')} style={styles.headerBtn}>
-          <ChevronLeft size={24} color="#FFF" />
-        </TouchableOpacity>
+        <TouchableOpacity onPress={() => router.replace('/home')}><ChevronLeft size={24} color="#FFF" /></TouchableOpacity>
         <View style={styles.headerCenter}>
           <Text style={styles.headerTitle}>{targetAgent?.alias?.toUpperCase()}</Text>
           <Text style={[styles.headerStatus, { color: targetAgent?.isOnline ? COLORS.terminal_green : COLORS.muted_text }]}>
@@ -278,8 +285,6 @@ const styles = StyleSheet.create({
   fileBox: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: 'rgba(0,0,0,0.1)', padding: 10 },
   fileText: { color: COLORS.terminal_green, fontSize: 12, fontFamily: 'monospace' },
   msgMeta: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 6, justifyContent: 'flex-end' },
-  timerBadge: { flexDirection: 'row', alignItems: 'center', gap: 2, marginRight: 6 },
-  timerText: { color: COLORS.critical_red, fontSize: 9, fontFamily: 'monospace' },
   msgTime: { fontSize: 8, color: '#666', fontFamily: 'monospace' },
   progress: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10, padding: 8, backgroundColor: '#121212' },
   progressText: { color: COLORS.terminal_green, fontSize: 10, fontFamily: 'monospace' },

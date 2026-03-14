@@ -42,19 +42,30 @@ export async function destroyIdentity() {
   const user = auth.currentUser;
   if (!user) throw new Error("No active session found.");
 
-  const uid = user.uid; // ⚡ CRITICAL: Capture UID before Auth deletion
+  const uid = user.uid;
 
   try {
     console.log("[GHOST-WIPE] Initiating identity termination for UID:", uid);
 
-    // 1. Delete Firebase Auth User FIRST
-    await deleteUser(user);
-    console.log("[GHOST-WIPE] Auth identity terminated.");
-
-    // 2. Delete Firestore Profile (This releases the alias for others)
+    // 1. Delete Firestore Profile FIRST (while we have auth permissions)
+    // This releases the alias for others.
     const userDocRef = doc(db, "users", uid);
     await deleteDoc(userDocRef);
-    console.log("[GHOST-WIPE] Firestore document erased. Alias released.");
+    console.log("[GHOST-WIPE] Firestore document erased.");
+
+    // 2. Delete Firebase Auth User
+    try {
+      await deleteUser(user);
+      console.log("[GHOST-WIPE] Auth identity terminated.");
+    } catch (authErr) {
+      if (authErr.code === 'auth/requires-recent-login') {
+        // Doc is already deleted, but Auth remains. Force logout so they must re-login.
+        await signOut(auth);
+        await clearToken();
+        throw new Error("SENSITIVE ACTION: Security token expired. Please sign in again to finalize account deletion.");
+      }
+      throw authErr;
+    }
 
     // 3. Clear local storage
     await clearToken();
@@ -62,14 +73,7 @@ export async function destroyIdentity() {
     return true;
   } catch (e) {
     console.error("[GHOST-WIPE] Purge failed:", e);
-
-    if (e.code === 'auth/requires-recent-login') {
-      await signOut(auth);
-      await clearToken();
-      throw new Error("SENSITIVE ACTION: Security token expired. Sign out and sign back in to authorize destruction.");
-    }
-
-    throw new Error(`Protocol Error: ${e.message}`);
+    throw e;
   }
 }
 
