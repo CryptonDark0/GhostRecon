@@ -60,7 +60,7 @@ export default function OnboardingScreen() {
           <Text style={styles.appName}>GHOSTRECON</Text>
           <View style={styles.taglineRow}>
             <ShieldCheck size={12} color={COLORS.terminal_green} />
-            <Text style={styles.tagline}>MILITARY-GRADE ENCRYPTION</Text>
+            <Text style={styles.tagline}>E2EE & AES-256 ENCRYPTION</Text>
           </View>
         </Animated.View>
 
@@ -80,16 +80,16 @@ export default function OnboardingScreen() {
             activeOpacity={0.8}
           >
             <LogIn size={20} color={COLORS.terminal_green} />
-            <Text style={styles.secondaryBtnText}>RESUME SESSION</Text>
+            <Text style={styles.secondaryBtnText}>LOGIN</Text>
           </TouchableOpacity>
         </View>
 
         <View style={styles.footerInfo}>
           <View style={styles.statusBadge}>
             <Zap size={10} color={COLORS.terminal_green} />
-            <Text style={styles.statusText}>ENCRYPTION: ACTIVE (ECC-P256)</Text>
+            <Text style={styles.statusText}>ENCRYPTION: ACTIVE (E2EE + AES-256)</Text>
           </View>
-          <Text style={styles.versionText}>SYSTEM v2.1.0 // ZERO-KNOWLEDGE PROTOCOL</Text>
+          <Text style={styles.versionText}>SYSTEM v2.1.1 // ZERO-KNOWLEDGE PROTOCOL</Text>
         </View>
       </View>
     </SafeAreaView>
@@ -118,7 +118,7 @@ const styles = StyleSheet.create({
   },
   appName: { fontSize: 36, fontWeight: '900', color: COLORS.terminal_green, letterSpacing: 8, fontFamily: 'monospace' },
   taglineRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 12 },
-  tagline: { fontSize: 10, color: COLORS.muted_text, letterSpacing: 2, fontFamily: 'monospace' },
+  tagline: { fontSize: 10, color: COLORS.muted_text, letterSpacing: 1, fontFamily: 'monospace' },
   actions: { gap: 18 },
   primaryBtn: { height: 60, backgroundColor: COLORS.terminal_green, borderRadius: 2, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 12, borderLeftWidth: 4, borderLeftColor: COLORS.ghost_white },
   primaryBtnText: { color: COLORS.void_black, fontSize: 14, fontWeight: '900', fontFamily: 'monospace', letterSpacing: 1 },

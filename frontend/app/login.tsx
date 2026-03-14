@@ -1,10 +1,10 @@
 import React, { useState } from "react";
 import {
   View, Text, StyleSheet, TouchableOpacity, SafeAreaView,
-  TextInput, ActivityIndicator, Alert, KeyboardAvoidingView, Platform,
+  TextInput, ActivityIndicator, Alert, KeyboardAvoidingView, Platform, Image
 } from "react-native";
 import { useRouter } from "expo-router";
-import { ChevronLeft, LogIn, Key } from "lucide-react-native";
+import { ChevronLeft, LogIn, Key, Eye, EyeOff } from "lucide-react-native";
 import { COLORS } from "../src/constants";
 import { signInWithEmailAndPassword, sendPasswordResetEmail } from "firebase/auth";
 import { auth } from "../src/firebase";
@@ -14,6 +14,7 @@ export default function LoginScreen() {
   const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [resetLoading, setResetLoading] = useState(false);
 
@@ -94,7 +95,11 @@ export default function LoginScreen() {
         <View style={styles.content}>
           <View style={styles.iconArea}>
             <View style={styles.iconCircle}>
-              <LogIn size={40} color={COLORS.terminal_green} />
+              <Image
+                source={require('../assets/images/icon.png')}
+                style={styles.tacticalIcon}
+                resizeMode="contain"
+              />
             </View>
           </View>
 
@@ -116,17 +121,25 @@ export default function LoginScreen() {
 
           <View style={styles.inputGroup}>
             <Text style={styles.label}>SECURITY PASSPHRASE</Text>
-            <TextInput
-              style={styles.input}
-              value={password}
-              onChangeText={setPassword}
-              placeholder="Enter secure passphrase"
-              placeholderTextColor={COLORS.stealth_grey}
-              secureTextEntry
-              autoComplete="password"
-              id="login-password"
-              {...Platform.select({ web: { name: 'password' } } as any)}
-            />
+            <View style={styles.passwordContainer}>
+              <TextInput
+                style={[styles.input, { flex: 1, borderBottomWidth: 0, marginBottom: 0 }]}
+                value={password}
+                onChangeText={setPassword}
+                placeholder="Enter secure passphrase"
+                placeholderTextColor={COLORS.stealth_grey}
+                secureTextEntry={!showPassword}
+                autoComplete="password"
+                id="login-password"
+                {...Platform.select({ web: { name: 'password' } } as any)}
+              />
+              <TouchableOpacity
+                onPress={() => setShowPassword(!showPassword)}
+                style={styles.eyeBtn}
+              >
+                {showPassword ? <EyeOff size={20} color={COLORS.terminal_green} /> : <Eye size={20} color={COLORS.terminal_green} />}
+              </TouchableOpacity>
+            </View>
           </View>
 
           <TouchableOpacity
@@ -192,6 +205,11 @@ const styles = StyleSheet.create({
     borderWidth: 2, borderColor: COLORS.terminal_green,
     alignItems: "center", justifyContent: "center",
     backgroundColor: "rgba(0,255,65,0.05)",
+    overflow: 'hidden'
+  },
+  tacticalIcon: {
+    width: 50,
+    height: 50,
   },
   inputGroup: { marginBottom: 20 },
   label: {
@@ -211,6 +229,17 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontFamily: "monospace",
     padding: 16,
+  },
+  passwordContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: COLORS.gunmetal,
+    borderWidth: 1,
+    borderColor: COLORS.border_subtle,
+    borderRadius: 2,
+  },
+  eyeBtn: {
+    padding: 12,
   },
   loginBtn: {
     height: 56,
