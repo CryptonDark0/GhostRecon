@@ -23,7 +23,7 @@ export default function RegisterPseudonym() {
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
 
-  // ENSURE CLEAN STATE: Completely wipe any local ghost data before starting
+  // ENSURE CLEAN STATE
   useEffect(() => {
     const forceCleanup = async () => {
       await signOut(auth).catch(() => {});
@@ -81,30 +81,28 @@ export default function RegisterPseudonym() {
     }
 
     setLoading(true);
-    console.log("[GHOST-PROTOCOL] Starting Identity Validation...");
-
     try {
-      // 1. PRE-CHECK: Verify Alias Uniqueness before doing anything else
-      const usersRef = collection(db, "users");
-      const q = query(usersRef, where("alias_lowercase", "==", trimmedAlias.toLowerCase()));
-      const querySnapshot = await getDocs(q);
-
-      if (!querySnapshot.empty) {
-        setLoading(false);
-        showAlert('Alias Taken', 'This codename is already assigned to another active agent. If you just deleted an account, please wait 5 seconds.');
-        return;
-      }
-
-      // 2. Create Auth Identity
+      // 1. Authenticate FIRST (Required by security rules to query 'users')
       const userCredential = await createUserWithEmailAndPassword(auth, trimmedEmail, password);
       const user = userCredential.user;
 
       try {
-        // 3. Dispatch Verification
+        // 2. Check Alias Uniqueness while authenticated
+        const usersRef = collection(db, "users");
+        const q = query(usersRef, where("alias_lowercase", "==", trimmedAlias.toLowerCase()));
+        const querySnapshot = await getDocs(q);
+
+        if (!querySnapshot.empty) {
+          await deleteUser(user);
+          setLoading(false);
+          showAlert('Alias Taken', 'This tactical alias is already assigned.');
+          return;
+        }
+
+        // 3. Handshake & Profile creation
         await sendEmailVerification(user);
         const keyPair = await getOrCreateKeyPair();
 
-        // 4. Persist Profile
         await setDoc(doc(db, "users", user.uid), {
           alias: trimmedAlias,
           alias_lowercase: trimmedAlias.toLowerCase(),
@@ -118,7 +116,7 @@ export default function RegisterPseudonym() {
           isSubscribed: false
         });
 
-        // 5. Cleanup session for verification handshake
+        // 4. Cleanup session until verification
         await signOut(auth);
         await clearToken();
         setLoading(false);
@@ -126,7 +124,6 @@ export default function RegisterPseudonym() {
         router.replace('/');
 
       } catch (innerErr: any) {
-        console.error("[GHOST-PROTOCOL] Rollback triggered:", innerErr);
         await deleteUser(user).catch(() => {});
         throw innerErr;
       }
@@ -187,7 +184,7 @@ export default function RegisterPseudonym() {
               <View style={styles.requirementsContainer}>
                 <Requirement label="At least 6 characters" met={passStatus.length} />
                 <Requirement label="Uppercase letter" met={passStatus.upper} />
-                <Requirement label="Lowercase letter" met={met = passStatus.lower} />
+                <Requirement label="Lowercase letter" met={passStatus.lower} />
                 <Requirement label="Number" met={passStatus.number} />
                 <Requirement label="Special character" met={passStatus.special} />
               </View>
