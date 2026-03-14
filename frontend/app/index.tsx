@@ -3,13 +3,14 @@ import {
   View, Text, StyleSheet, TouchableOpacity, SafeAreaView,
   Animated, ActivityIndicator, Image, Dimensions, Platform
 } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useRouter, useSegments } from 'expo-router';
 import { LogIn, UserPlus, ShieldCheck, Zap } from 'lucide-react-native';
 import { COLORS } from '../src/constants';
 import { auth } from '../src/firebase';
 
 export default function OnboardingScreen() {
   const router = useRouter();
+  const segments = useSegments();
   const [checking, setChecking] = useState(true);
 
   const fadeAnim = useRef(new Animated.Value(0)).current;
@@ -17,10 +18,16 @@ export default function OnboardingScreen() {
 
   useEffect(() => {
     const unsubscribe = auth.onAuthStateChanged((user) => {
+      // 🛡️ TACTICAL NAVIGATION GUARD
+      // Only redirect to home if the user is ACTUALLY on the onboarding path.
+      // This prevents interrupting active calls or chats during auth refreshes.
+      const isAtRoot = segments.length === 0 || (segments.length === 1 && segments[0] === '(onboarding)');
+
       if (user) {
-        // Only redirect to home if we are actually on the onboarding screen
-        // This prevents "flickering" or being kicked out of other screens
-        router.replace('/home');
+        if (isAtRoot) {
+          console.log("[GHOST-AUTH] Operator recognized. Routing to home node.");
+          router.replace('/home');
+        }
       } else {
         setChecking(false);
         startAnimations();
@@ -28,7 +35,7 @@ export default function OnboardingScreen() {
     });
 
     return () => unsubscribe();
-  }, []);
+  }, [segments]);
 
   const startAnimations = () => {
     const useNativeDriver = Platform.OS !== 'web';

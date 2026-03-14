@@ -11,7 +11,11 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.sonsofunity.ghostrecon",
-      "icon": "./assets/images/icon.png"
+      "icon": "./assets/images/icon.png",
+      "infoPlist": {
+        "NSCameraUsageDescription": "GhostRecon requires access to the camera for secure video calls.",
+        "NSMicrophoneUsageDescription": "GhostRecon requires access to the microphone for secure audio and video calls."
+      }
     },
     "android": {
       "adaptiveIcon": {
@@ -19,7 +23,14 @@
         "backgroundColor": "#050505"
       },
       "package": "com.sonsofunity.ghostrecon",
-      "versionCode": 1
+      "versionCode": 1,
+      "permissions": [
+        "CAMERA",
+        "RECORD_AUDIO",
+        "MODIFY_AUDIO_SETTINGS",
+        "ACCESS_NETWORK_STATE",
+        "INTERNET"
+      ]
     },
     "web": {
       "bundler": "metro",
@@ -27,7 +38,14 @@
       "favicon": "./assets/images/icon.png"
     },
     "plugins": [
-      "expo-router"
+      "expo-router",
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/images/icon.png",
+          "color": "#00FF41"
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true

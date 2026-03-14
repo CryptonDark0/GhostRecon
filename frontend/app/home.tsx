@@ -102,8 +102,12 @@ export default function HomeScreen() {
         });
 
       } else {
-        AsyncStorage.removeItem(PROFILE_CACHE_KEY);
-        router.replace("/");
+        // ONLY redirect to index if we are NOT currently trying to connect a call
+        // This prevents the "Auth Flicker" from killing the dialer
+        if (!loading) {
+           AsyncStorage.removeItem(PROFILE_CACHE_KEY);
+           router.replace("/");
+        }
       }
     });
 
@@ -112,7 +116,7 @@ export default function HomeScreen() {
       if (unsubscribeProfile) unsubscribeProfile();
       if (unsubscribeConvs) unsubscribeConvs();
     };
-  }, []);
+  }, [loading]);
 
   if (loading && !userProfile) {
     return (

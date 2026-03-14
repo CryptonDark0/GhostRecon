@@ -27,7 +27,6 @@ const rtcConfig = {
   iceCandidatePoolSize: 10,
 };
 
-// Tactical helper to get the correct RTC provider
 const getRTCProvider = () => {
   if (Platform.OS === 'web') {
     return {
@@ -53,6 +52,12 @@ export const setOnRemoteStreamUpdate = (callback: (stream: any) => void) => {
 export async function startLocalStream(isVideo: boolean) {
   const provider = getRTCProvider();
   if (!provider) return null;
+
+  // 🛡️ REUSE PROTECTION: Reuse local stream if already active
+  if (localStream && localStream.active) {
+    console.log("[GHOST-RTC] Reusing existing local stream.");
+    return localStream;
+  }
 
   const constraints = {
     audio: true,
@@ -90,7 +95,7 @@ export async function createCall(targetUserId: string, callerId: string, isVideo
 
   peerConnection.ontrack = (event: any) => {
     const stream = event.streams[0];
-    if (stream) {
+    if (stream && stream.id !== remoteStream?.id) {
       remoteStream = stream;
       if (onRemoteStreamUpdate) onRemoteStreamUpdate(remoteStream);
     }
@@ -128,7 +133,7 @@ export async function createCall(targetUserId: string, callerId: string, isVideo
     snapshot.docChanges().forEach((change) => {
       if (change.type === "added" && peerConnection) {
         const candidate = new provider.RTCIceCandidate(change.doc.data());
-        peerConnection.addIceCandidate(candidate).catch(e => console.error("Error adding ice candidate", e));
+        peerConnection.addIceCandidate(candidate).catch(e => {});
       }
     });
   });
@@ -154,7 +159,7 @@ export async function joinCall(callId: string) {
 
   peerConnection.ontrack = (event: any) => {
     const stream = event.streams[0];
-    if (stream) {
+    if (stream && stream.id !== remoteStream?.id) {
       remoteStream = stream;
       if (onRemoteStreamUpdate) onRemoteStreamUpdate(remoteStream);
     }
@@ -181,7 +186,7 @@ export async function joinCall(callId: string) {
   onSnapshot(offerCandidates, (snapshot) => {
     snapshot.docChanges().forEach((change) => {
       if (change.type === "added" && peerConnection) {
-        peerConnection.addIceCandidate(new provider.RTCIceCandidate(change.doc.data())).catch(e => console.error(e));
+        peerConnection.addIceCandidate(new provider.RTCIceCandidate(change.doc.data())).catch(e => {});
       }
     });
   });
