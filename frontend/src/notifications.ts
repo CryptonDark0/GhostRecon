@@ -8,9 +8,9 @@ import { doc, updateDoc } from 'firebase/firestore';
  * Connects the physical device to the GhostRecon signaling network.
  */
 export async function registerForPushNotifications(): Promise<string | null> {
-  // 🛡️ Web/Simulator Protocol: Push is handled via browser service workers
-  if (Platform.OS === 'web' || !Device.isDevice) {
-    console.log('[GHOST-NOTIF] Handshake bypassed (Web/Simulator)');
+  // 🛡️ Tactical Bypass: Physical hardware or Web environment required
+  if (!Device.isDevice && Platform.OS !== 'web') {
+    console.log('[GHOST-NOTIF] Handshake bypassed (Simulator)');
     return null;
   }
 
@@ -50,9 +50,10 @@ export async function registerForPushNotifications(): Promise<string | null> {
       });
     }
 
-    // Retrieve unique device token
+    // Retrieve unique device token using VAPID for Web support
     const tokenData = await Notifications.getExpoPushTokenAsync({
-      projectId: 'ghostrecon-9c294', // Matches your Firebase project ID
+      projectId: 'ghostrecon-9c294',
+      vapidKey: 'BO9_lB7J1j9iPTwAtn3WQXVTgSZGRLILk21cCjTdNPcPNXFHpJ54lUr315s-QFijAYY6i1AiW9qo_yg0TBWKGYg'
     });
     const token = tokenData.data;
 
@@ -62,9 +63,10 @@ export async function registerForPushNotifications(): Promise<string | null> {
       const userRef = doc(db, "users", user.uid);
       await updateDoc(userRef, {
         pushToken: token,
-        deviceType: Platform.OS
+        deviceType: Platform.OS,
+        lastOnline: new Date().toISOString()
       });
-      console.log('[GHOST-NOTIF] Tactical link established.');
+      console.log(`[GHOST-NOTIF] Tactical link established for ${Platform.OS}.`);
     }
 
     return token;
