@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity, SafeAreaView,
-  TextInput, ActivityIndicator, Alert, KeyboardAvoidingView, Platform, ScrollView, Keyboard
+  TextInput, ActivityIndicator, Alert, KeyboardAvoidingView, Platform, ScrollView, Keyboard, Image
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { ChevronLeft, Shield, Eye, EyeOff, Check, X } from 'lucide-react-native';
@@ -11,6 +11,7 @@ import { doc, setDoc, serverTimestamp, collection, query, where, getDocs } from 
 import { auth, db } from '../src/firebase';
 import { setToken, clearToken } from '../src/api';
 import { getOrCreateKeyPair } from '../src/encryption';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const ALIAS_REGEX = /^[a-zA-Z0-9_ .\-]{3,20}$/;
 
@@ -22,13 +23,14 @@ export default function RegisterPseudonym() {
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
 
-  // ENSURE CLEAN STATE: Sign out any existing ghost session before starting
+  // ENSURE CLEAN STATE
   useEffect(() => {
-    const clearSession = async () => {
+    const forceWipe = async () => {
       await signOut(auth).catch(() => {});
       await clearToken().catch(() => {});
+      await AsyncStorage.clear().catch(() => {});
     };
-    clearSession();
+    forceWipe();
   }, []);
 
   const validatePassword = (pass: string) => {
@@ -63,7 +65,7 @@ export default function RegisterPseudonym() {
     }
 
     if (!ALIAS_REGEX.test(trimmedAlias)) {
-      showAlert('Invalid Alias', 'Alias must be 3-20 characters (Alphanumeric, spaces, dots, or underscores only).');
+      showAlert('Invalid Alias', 'Alias must be 3-20 characters.');
       return;
     }
 
@@ -73,35 +75,26 @@ export default function RegisterPseudonym() {
     }
 
     setLoading(true);
-    console.log("[GHOST-PROTOCOL] Initiating Identity Creation...");
-
     try {
-      // 1. Create Auth Identity
+      // 1. Check Alias Uniqueness
+      const usersRef = collection(db, "users");
+      const q = query(usersRef, where("alias_lowercase", "==", trimmedAlias.toLowerCase()));
+      const querySnapshot = await getDocs(q);
+
+      if (!querySnapshot.empty) {
+        setLoading(false);
+        showAlert('Alias Taken', 'This tactical alias is already assigned.');
+        return;
+      }
+
+      // 2. Auth Identity
       const userCredential = await createUserWithEmailAndPassword(auth, trimmedEmail, password);
       const user = userCredential.user;
-      console.log("[GHOST-PROTOCOL] Auth success for:", user.uid);
 
       try {
-        // 2. Uniqueness Check (Must happen while authenticated)
-        const usersRef = collection(db, "users");
-        const q = query(usersRef, where("alias_lowercase", "==", trimmedAlias.toLowerCase()));
-        const querySnapshot = await getDocs(q);
-
-        if (!querySnapshot.empty) {
-          console.log("[GHOST-PROTOCOL] Alias collision. Rolling back.");
-          await deleteUser(user);
-          setLoading(false);
-          showAlert('Alias Taken', 'This tactical alias is already assigned to another active agent.');
-          return;
-        }
-
-        // 3. Email Verification Dispatch
         await sendEmailVerification(user);
-
-        // 4. Cryptographic Handshake
         const keyPair = await getOrCreateKeyPair();
 
-        // 5. Finalize Network Profile
         await setDoc(doc(db, "users", user.uid), {
           alias: trimmedAlias,
           alias_lowercase: trimmedAlias.toLowerCase(),
@@ -111,30 +104,23 @@ export default function RegisterPseudonym() {
           createdAt: serverTimestamp(),
           isOnline: false,
           emailVerified: false,
-          storageUsedBytes: 0
+          storageUsedBytes: 0,
+          isSubscribed: false
         });
 
-        // 6. Terminate session until email is verified (Security Protocol)
         await signOut(auth);
         await clearToken();
-
         setLoading(false);
-        showAlert('HANDSHAKE PENDING', 'Verification link dispatched to Gmail. You MUST verify your email before signing in.');
+        showAlert('HANDSHAKE PENDING', 'Verification link dispatched to Gmail. Please verify before signing in.');
         router.replace('/');
 
       } catch (innerErr: any) {
-        console.error("[GHOST-PROTOCOL] Profile sync failure:", innerErr);
         await deleteUser(user).catch(() => {});
         throw innerErr;
       }
     } catch (err: any) {
-      console.error("[GHOST-PROTOCOL] Handshake Error:", err);
-      let msg = err.message;
-      if (err.code === 'auth/email-already-in-use') msg = "This email is already linked to an active identity.";
-      if (err.code === 'permission-denied') msg = "Access Denied: Please ensure Firestore Rules are published.";
-      showAlert('Handshake Failed', msg);
-    } finally {
       setLoading(false);
+      showAlert('Handshake Failed', err.message);
     }
   };
 
@@ -152,69 +138,38 @@ export default function RegisterPseudonym() {
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.flex}>
         <ScrollView contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
           <View style={styles.header}>
-            <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
+            <TouchableOpacity onPress={() => router.replace('/')} style={styles.backBtn}>
               <ChevronLeft size={24} color="#FFF" />
             </TouchableOpacity>
             <Text style={styles.headerTitle}>INITIALIZE IDENTITY</Text>
             <View style={{ width: 40 }} />
           </View>
 
+          <View style={styles.iconArea}>
+            <View style={styles.logoCircle}>
+              <Image source={require('../assets/images/icon.png')} style={styles.tacticalIcon} resizeMode="contain" />
+            </View>
+          </View>
+
           <View style={styles.form}>
             <View style={styles.inputGroup}>
               <Text style={styles.label}>TACTICAL ALIAS</Text>
-              <TextInput
-                style={styles.input}
-                value={alias}
-                onChangeText={setAlias}
-                placeholder="Agent_Shadow"
-                placeholderTextColor="#444"
-                autoComplete="username"
-                autoCapitalize="none"
-                autoCorrect={false}
-                id="alias-field"
-                {...Platform.select({ web: { name: 'username' } } as any)}
-              />
+              <TextInput style={styles.input} value={alias} onChangeText={setAlias} placeholder="Agent_Shadow" placeholderTextColor="#444" autoComplete="username" autoCapitalize="none" autoCorrect={false} />
             </View>
 
             <View style={styles.inputGroup}>
               <Text style={styles.label}>EMAIL ADDRESS</Text>
-              <TextInput
-                style={styles.input}
-                value={email}
-                onChangeText={setEmail}
-                placeholder="agent@secure-link.com"
-                placeholderTextColor="#444"
-                keyboardType="email-address"
-                autoComplete="email"
-                autoCapitalize="none"
-                autoCorrect={false}
-                id="email-field"
-                {...Platform.select({ web: { name: 'email' } } as any)}
-              />
+              <TextInput style={styles.input} value={email} onChangeText={setEmail} placeholder="agent@secure-link.com" placeholderTextColor="#444" keyboardType="email-address" autoComplete="email" autoCapitalize="none" autoCorrect={false} />
             </View>
 
             <View style={styles.inputGroup}>
               <Text style={styles.label}>SECURITY PASSPHRASE</Text>
               <View style={styles.passwordContainer}>
-                <TextInput
-                  style={[styles.input, { flex: 1, marginBottom: 0 }]}
-                  value={password}
-                  onChangeText={setPassword}
-                  placeholder="Tactical Passphrase"
-                  placeholderTextColor="#444"
-                  secureTextEntry={!showPassword}
-                  autoComplete="new-password"
-                  id="pass-field"
-                  {...Platform.select({ web: { name: 'password' } } as any)}
-                />
-                <TouchableOpacity
-                  onPress={() => setShowPassword(!showPassword)}
-                  style={styles.eyeBtn}
-                >
+                <TextInput style={[styles.input, { flex: 1, marginBottom: 0 }]} value={password} onChangeText={setPassword} placeholder="Tactical Passphrase" placeholderTextColor="#444" secureTextEntry={!showPassword} autoComplete="new-password" />
+                <TouchableOpacity onPress={() => setShowPassword(!showPassword)} style={styles.eyeBtn}>
                   {showPassword ? <EyeOff size={20} color={COLORS.terminal_green} /> : <Eye size={20} color={COLORS.terminal_green} />}
                 </TouchableOpacity>
               </View>
-
               <View style={styles.requirementsContainer}>
                 <Requirement label="At least 6 characters" met={passStatus.length} />
                 <Requirement label="Uppercase letter" met={passStatus.upper} />
@@ -224,11 +179,7 @@ export default function RegisterPseudonym() {
               </View>
             </View>
 
-            <TouchableOpacity
-              style={[styles.confirmBtn, (!isPassValid || loading) && { opacity: 0.6 }]}
-              onPress={handleRegister}
-              disabled={loading || !isPassValid}
-            >
+            <TouchableOpacity style={[styles.confirmBtn, (!isPassValid || loading) && { opacity: 0.6 }]} onPress={handleRegister} disabled={loading || !isPassValid}>
               {loading ? <ActivityIndicator color="#000" /> : <Text style={styles.confirmBtnText}>AUTHORIZE IDENTITY</Text>}
             </TouchableOpacity>
           </View>
@@ -244,8 +195,11 @@ const styles = StyleSheet.create({
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 16, borderBottomWidth: 1, borderBottomColor: '#1A1A1A' },
   backBtn: { padding: 8 },
   headerTitle: { color: '#FFF', fontSize: 12, fontWeight: '700', fontFamily: 'monospace', letterSpacing: 2 },
-  scrollContent: { paddingHorizontal: 32, paddingVertical: 40 },
-  form: { gap: 24 },
+  iconArea: { alignItems: 'center', marginTop: 32 },
+  logoCircle: { width: 80, height: 80, borderRadius: 40, borderWidth: 1, borderColor: COLORS.terminal_green, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(0,255,65,0.05)', overflow: 'hidden' },
+  tacticalIcon: { width: 50, height: 50 },
+  scrollContent: { paddingHorizontal: 32, paddingVertical: 20 },
+  form: { marginTop: 24, gap: 24 },
   inputGroup: { gap: 8 },
   label: { color: '#00FF41', fontSize: 10, fontWeight: '700', fontFamily: 'monospace' },
   input: { backgroundColor: '#0F0F0F', padding: 18, color: '#FFF', fontFamily: 'monospace', borderRadius: 2, borderWidth: 1, borderColor: '#333' },

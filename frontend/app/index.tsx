@@ -19,7 +19,7 @@ export default function OnboardingScreen() {
 
   useEffect(() => {
     const unsubscribe = auth.onAuthStateChanged((user) => {
-      if (user) {
+      if (user && user.emailVerified) {
         router.replace('/home');
       } else {
         setChecking(false);
@@ -101,19 +101,19 @@ const styles = StyleSheet.create({
   loadingContainer: { flex: 1, backgroundColor: COLORS.void_black, justifyContent: 'center', alignItems: 'center' },
   content: { flex: 1, paddingHorizontal: 40, justifyContent: 'center' },
   logoArea: { alignItems: 'center', marginBottom: 80 },
-  iconContainer: { width: 140, height: 140, marginBottom: 24, alignItems: 'center', justifyContent: 'center', position: 'relative' },
-  mainLogo: { width: 120, height: 120 },
+  iconContainer: { width: 160, height: 160, marginBottom: 24, alignItems: 'center', justifyContent: 'center', position: 'relative' },
+  mainLogo: { width: 140, height: 140 },
   scannerLine: {
     position: 'absolute',
     top: '50%',
-    width: 140,
+    width: 160,
     height: 1,
     backgroundColor: COLORS.terminal_green,
-    opacity: 0.3,
+    opacity: 0.4,
     ...Platform.select({
-      ios: { shadowColor: COLORS.terminal_green, shadowOpacity: 1, shadowRadius: 10 },
-      android: { elevation: 5 },
-      web: { boxShadow: `0 0 10px ${COLORS.terminal_green}` }
+      ios: { shadowColor: COLORS.terminal_green, shadowOpacity: 1, shadowRadius: 15 },
+      android: { elevation: 10 },
+      web: { boxShadow: `0 0 15px ${COLORS.terminal_green}` }
     })
   },
   appName: { fontSize: 36, fontWeight: '900', color: COLORS.terminal_green, letterSpacing: 8, fontFamily: 'monospace' },

@@ -48,6 +48,9 @@ async function checkStorageLimit(userId: string, incomingBytes: number) {
 
 // --- CONVERSATION MANAGEMENT ---
 
+/**
+ * Finds or creates a conversation between participants.
+ */
 export async function createConversation(participants: string[], name?: string, isGroup: boolean = false) {
   if (!isGroup && participants.length === 2) {
     const q = query(
@@ -57,11 +60,7 @@ export async function createConversation(participants: string[], name?: string, 
     );
 
     const snapshot = await getDocs(q);
-    const existing = snapshot.docs.find(doc => {
-      const data = doc.data();
-      return data.participants.includes(participants[1]);
-    });
-
+    const existing = snapshot.docs.find(doc => doc.data().participants.includes(participants[1]));
     if (existing) return { id: existing.id, ...existing.data() };
   }
 
@@ -70,10 +69,8 @@ export async function createConversation(participants: string[], name?: string, 
     name: name || null,
     isGroup,
     createdAt: serverTimestamp(),
-    encryption_protocol: 'X25519_AES_GCM',
     lastMessage: '',
     lastMessageAt: serverTimestamp(),
-    adminId: isGroup ? participants[0] : null,
     unreadCounts: participants.reduce((acc, uid) => ({ ...acc, [uid]: 0 }), {})
   });
 
