@@ -1,15 +1,19 @@
-import { Stack, useRouter } from 'expo-router';
+import { Stack, useRouter, useSegments } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import { StyleSheet, Alert, Platform } from 'react-native';
-import { useEffect, useRef } from 'react';
+import { StyleSheet, Alert, Platform, AppState, AppStateStatus } from 'react-native';
+import { useEffect, useRef, useState } from 'react';
 import { registerForPushNotifications } from '../src/notifications';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { auth, db } from '../src/firebase';
 import { collection, query, where, onSnapshot } from 'firebase/firestore';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 export default function RootLayout() {
   const router = useRouter();
+  const segments = useSegments();
   const ringtoneSound = useRef<any>(null);
+  const appState = useRef(AppState.currentState);
+  const [isLocked, setIsLocked] = useState(false);
 
   async function playRingtone() {
     if (Platform.OS === 'web') return;
@@ -37,8 +41,68 @@ export default function RootLayout() {
     }
   }
 
+  // Handle Privacy & Security Logic
   useEffect(() => {
-    // Only register push on native
+    const handleAppStateChange = async (nextAppState: AppStateStatus) => {
+      const savedSettings = await AsyncStorage.getItem('ghostrecon_privacy_settings');
+      const settings = savedSettings ? JSON.parse(savedSettings) : {};
+
+      // 1. AUTO-LOCK Logic
+      if (
+        appState.current.match(/active/) &&
+        (nextAppState === 'inactive' || nextAppState === 'background')
+      ) {
+        if (settings.app_lock_immediate) {
+          setIsLocked(true);
+        }
+      }
+
+      if (appState.current.match(/inactive|background/) && nextAppState === 'active') {
+        const bioEnabled = await AsyncStorage.getItem('ghostrecon_biometric_enabled');
+        if (isLocked || bioEnabled === 'true') {
+          const inAuthGroup = segments[0] === '(auth)' || segments[0] === 'biometric-lock' || segments[0] === 'login' || segments[0] === 'register-pseudonym';
+          if (!inAuthGroup && auth.currentUser) {
+            router.replace('/biometric-lock');
+          }
+        }
+      }
+
+      // 2. SCREEN MASKING Logic (Dynamic load to prevent crash)
+      if (Platform.OS !== 'web') {
+        try {
+          const ScreenCapture = require('expo-screen-capture');
+          if (settings.screenshot_protection) {
+            await ScreenCapture.preventScreenCaptureAsync();
+          } else {
+            await ScreenCapture.allowScreenCaptureAsync();
+          }
+        } catch (e) {}
+      }
+
+      appState.current = nextAppState;
+    };
+
+    const subscription = AppState.addEventListener('change', handleAppStateChange);
+
+    const syncPrivacy = async () => {
+      if (Platform.OS === 'web') return;
+      try {
+        const savedSettings = await AsyncStorage.getItem('ghostrecon_privacy_settings');
+        const settings = savedSettings ? JSON.parse(savedSettings) : {};
+        if (settings.screenshot_protection) {
+          const ScreenCapture = require('expo-screen-capture');
+          await ScreenCapture.preventScreenCaptureAsync();
+        }
+      } catch (e) {}
+    };
+    syncPrivacy();
+
+    return () => {
+      subscription.remove();
+    };
+  }, [isLocked, segments]);
+
+  useEffect(() => {
     if (Platform.OS !== 'web') {
       registerForPushNotifications();
     }
