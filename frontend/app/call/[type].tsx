@@ -51,8 +51,6 @@ export default function CallScreen() {
       const trackTypes = tracks.map((t: any) => t.kind.toUpperCase());
       setActiveTracks(trackTypes);
 
-      console.log(`[GHOST-RTC] Link Established. Tracks Detected: ${trackTypes.join(", ")}`);
-
       const audioTrack = stream.getAudioTracks()[0];
       if (audioTrack) {
         setIsAudioPassing(audioTrack.enabled && audioTrack.readyState === 'live');
@@ -90,6 +88,16 @@ export default function CallScreen() {
     return () => clearInterval(interval);
   }, [callStatus]);
 
+  const toggleMute = () => {
+    const stream = getLocalStream();
+    if (stream) {
+      stream.getAudioTracks().forEach((track: any) => {
+        track.enabled = muted; // Enable if we were muted, disable if we were live
+      });
+    }
+    setMuted(!muted);
+  };
+
   const playDialTone = async () => {
     try {
       const { sound } = await Audio.Sound.createAsync(
@@ -98,9 +106,7 @@ export default function CallScreen() {
       );
       if (isMounted.current) dialTone.current = sound;
       else await sound.unloadAsync();
-    } catch (e) {
-      console.log("[GHOST-AUDIO] Dial tone load failed.");
-    }
+    } catch (e) {}
   };
 
   const stopDialTone = async () => {
@@ -218,7 +224,7 @@ export default function CallScreen() {
         </View>
 
         <View style={styles.controls}>
-          <TouchableOpacity style={[styles.controlBtn, muted && styles.activeBtn]} onPress={() => setMuted(!muted)}>
+          <TouchableOpacity style={[styles.controlBtn, muted && styles.activeBtn]} onPress={toggleMute}>
             {muted ? <MicOff size={24} color="#000" /> : <Mic size={24} color="#FFF" />}
           </TouchableOpacity>
           <TouchableOpacity style={[styles.controlBtn, speaker && styles.activeBtn]} onPress={toggleSpeaker}>

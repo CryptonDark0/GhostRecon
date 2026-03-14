@@ -1,7 +1,8 @@
 import React, { useEffect, useState, useRef, useCallback } from "react";
 import {
-  View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, Alert, SafeAreaView, SectionList, Platform
+  View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, Alert, SectionList, Platform
 } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import { COLORS } from "../src/constants";
 import { clearToken, destroyIdentity } from "../src/api";
@@ -102,8 +103,6 @@ export default function HomeScreen() {
         });
 
       } else {
-        // ONLY redirect to index if we are NOT currently trying to connect a call
-        // This prevents the "Auth Flicker" from killing the dialer
         if (!loading) {
            AsyncStorage.removeItem(PROFILE_CACHE_KEY);
            router.replace("/");
@@ -128,7 +127,7 @@ export default function HomeScreen() {
   }
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
       <View style={styles.header}>
         <View>
           <Text style={styles.headerLabel}>OPERATOR</Text>

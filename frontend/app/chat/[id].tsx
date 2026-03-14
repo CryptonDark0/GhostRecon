@@ -1,16 +1,29 @@
 import React, { useState, useEffect, useRef } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity, SafeAreaView,
-  FlatList, TextInput, KeyboardAvoidingView, Platform, ActivityIndicator, Alert, Image, Modal, Linking
+  FlatList, TextInput, KeyboardAvoidingView, Platform, ActivityIndicator, Alert, Image, Modal, Linking, ScrollView, Dimensions
 } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
-import { ChevronLeft, Send, Lock, Phone, Video, ImageIcon, Paperclip, Clock, Trash2, ShieldAlert } from 'lucide-react-native';
+import { ChevronLeft, Send, Lock, Phone, Video, ImageIcon, Paperclip, Clock, Trash2, ShieldAlert, Smile, Search, Ghost, Target, Flame, Zap } from 'lucide-react-native';
 import { COLORS } from '../../src/constants';
 import { auth, db } from '../../src/firebase';
 import { doc, getDoc, onSnapshot, collection, query, orderBy, addDoc, serverTimestamp, updateDoc, deleteDoc } from 'firebase/firestore';
 import { uploadMedia, setTypingStatus, listenTypingStatus, markAsRead, deleteMessageForEveryone, deleteMessageForMe, addReaction, sendMessage } from '../../src/firestoreService';
 import * as ImagePicker from 'expo-image-picker';
 import * as DocumentPicker from 'expo-document-picker';
+
+const { width } = Dimensions.get('window');
+
+// 🛡️ SUPREME TACTICAL EMOJI SET (BEST OF THE BEST)
+const EMOJI_PACKS = {
+  CORE: ['👍', '❤️', '🔥', '😂', '😮', '🎯', '💯', '🫡', '🤝', '⚡'],
+  TACTICAL: ['🥷', '💀', '🕵️', '🔫', '⚔️', '💣', '🛡️', '🛰️', '📡', '🧿'],
+  STATUS: ['✅', '❌', '⚠️', '🚨', '📣', '🆘', '🛑', '🟢', '🔴', '🔋'],
+  OP: ['💪', '🦾', '🧠', '🕶️', '🧤', '🥾', '🧗', '🚁', '🚀', '🛸'],
+  INTEL: ['📈', '📉', '📊', '📋', '📁', '📂', '🔍', '📍', '🗺️', '🔒']
+};
+
+const ALL_EMOJIS = [...EMOJI_PACKS.CORE, ...EMOJI_PACKS.TACTICAL, ...EMOJI_PACKS.STATUS, ...EMOJI_PACKS.OP, ...EMOJI_PACKS.INTEL];
 
 export default function ChatDetail() {
   const router = useRouter();
@@ -25,13 +38,17 @@ export default function ChatDetail() {
   const [selfDestruct, setSelfDestruct] = useState<number | null>(null);
   const [selectedMsg, setSelectedMsg] = useState<any>(null);
   const [menuVisible, setMenuVisible] = useState(false);
+  const [emojiBarVisible, setEmojiBarVisible] = useState(false);
+  const [giphyVisible, setGiphyVisible] = useState(false);
+  const [giphyQuery, setGiphyQuery] = useState('');
+  const [gifs, setGifs] = useState<any[]>([]);
+  const [giphyLoading, setGiphyLoading] = useState(false);
 
   const flatListRef = useRef<FlatList>(null);
   const currentUser = auth.currentUser;
 
   useEffect(() => {
     if (!id || !currentUser) return;
-
     let unsubscribeMessages: () => void;
     let unsubscribeConv: () => void;
     let unsubscribeTyping: () => void;
@@ -39,7 +56,6 @@ export default function ChatDetail() {
     const setupChat = async () => {
       try {
         markAsRead(id, currentUser.uid);
-
         unsubscribeMessages = onSnapshot(query(collection(db, "conversations", id, "messages"), orderBy("created_at", "asc")), (snapshot) => {
           const allMsgs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() as any }));
           const filtered = allMsgs.filter(m => !m.hiddenFor?.includes(currentUser.uid))
@@ -47,7 +63,6 @@ export default function ChatDetail() {
           setMessages(filtered);
           setLoading(false);
         });
-
         unsubscribeConv = onSnapshot(doc(db, "conversations", id), async (docSnap) => {
           if (docSnap.exists()) {
             const data = docSnap.data();
@@ -57,14 +72,11 @@ export default function ChatDetail() {
             });
           }
         });
-
         unsubscribeTyping = listenTypingStatus(id, (typingIds) => {
           setTypingAgents(typingIds.filter(uid => uid !== currentUser.uid));
         });
-
       } catch (err) { setLoading(false); }
     };
-
     setupChat();
     return () => {
       if (unsubscribeConv) unsubscribeConv();
@@ -74,32 +86,16 @@ export default function ChatDetail() {
     };
   }, [id]);
 
-  useEffect(() => {
-    const timeouts: any[] = [];
-    messages.forEach(msg => {
-      if (msg.self_destruct_seconds && msg.created_at) {
-        const expiry = msg.created_at.getTime() + (msg.self_destruct_seconds * 1000);
-        const diff = expiry - Date.now();
-        if (diff <= 0) {
-          deleteDoc(doc(db, "conversations", id as string, "messages", msg.id)).catch(()=>{});
-        } else {
-          timeouts.push(setTimeout(() => deleteDoc(doc(db, "conversations", id as string, "messages", msg.id)).catch(()=>{}), diff));
-        }
-      }
-    });
-    return () => timeouts.forEach(t => clearTimeout(t));
-  }, [messages]);
-
   const handleSendMessage = async (type: string = 'text', mediaUrl: string | null = null, fileSize: number = 0, filePath: string | null = null) => {
     if ((!input.trim() && !mediaUrl) || !currentUser || !id) return;
     const text = input.trim();
     if (type === 'text') setInput('');
+    setEmojiBarVisible(false);
     setTypingStatus(id, currentUser.uid, false);
 
     try {
       const userDoc = await getDoc(doc(db, "users", currentUser.uid));
       const senderAlias = userDoc.exists() ? userDoc.data().alias : 'Ghost';
-
       await addDoc(collection(db, "conversations", id, "messages"), {
         conversation_id: id, sender_id: currentUser.uid, sender_alias: senderAlias,
         content: text, type, fileUrl: mediaUrl, filePath, fileSize, created_at: serverTimestamp(),
@@ -107,7 +103,6 @@ export default function ChatDetail() {
         hiddenFor: [],
         reactions: {}
       });
-
       await updateDoc(doc(db, "conversations", id), {
         lastMessageAt: serverTimestamp(),
         lastMessage: type === 'text' ? text : `[Tactical ${type}]`
@@ -115,103 +110,61 @@ export default function ChatDetail() {
     } catch (err) { Alert.alert("Link Failed", "Handshake failed."); }
   };
 
-  const pickMedia = async (mode: 'image' | 'file') => {
-    if (!currentUser) return;
+  const searchGiphy = async () => {
+    setGiphyLoading(true);
     try {
-      let result;
-      if (mode === 'image') {
-        result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ImagePicker.MediaTypeOptions.Images, quality: 0.8 });
-      } else {
-        result = await DocumentPicker.getDocumentAsync({ type: '*/*' });
-      }
-
-      if (!result.canceled && result.assets[0]) {
-        setSendingMedia(true);
-        const media = await uploadMedia(currentUser.uid, result.assets[0].uri, mode, setUploadProgress);
-        await handleSendMessage(mode, media.url, media.size, media.path);
-      }
-    } catch (e: any) { Alert.alert("Handshake Error", "Media dispatch failed."); }
-    finally { setSendingMedia(false); setUploadProgress(0); }
+      const endpoint = giphyQuery.trim()
+        ? `https://api.giphy.com/v1/gifs/search?api_key=dc6zaTOxFJmzC&q=${encodeURIComponent(giphyQuery)}&limit=30&rating=pg-13`
+        : `https://api.giphy.com/v1/gifs/trending?api_key=dc6zaTOxFJmzC&limit=30&rating=pg-13`;
+      const resp = await fetch(endpoint);
+      const data = await resp.json();
+      setGifs(data.data || []);
+    } catch (e) {
+      console.log("Giphy retrieval failed.");
+    } finally {
+      setGiphyLoading(false);
+    }
   };
 
   const handleCall = async (callType: 'voice' | 'video') => {
     if (!targetAgent || !id) return;
-
-    // Log call in chat history
     try {
       const userDoc = await getDoc(doc(db, "users", currentUser!.uid));
       const senderAlias = userDoc.exists() ? userDoc.data().alias : 'Ghost';
-
       await addDoc(collection(db, "conversations", id, "messages"), {
         conversation_id: id, sender_id: currentUser!.uid, sender_alias: senderAlias,
         content: `[OUTGOING ${callType.toUpperCase()} CALL]`, type: 'system',
         created_at: serverTimestamp()
       });
     } catch (e) {}
-
     router.push(`/call/${callType}?target=${targetAgent.uid}`);
-  };
-
-  const handleAction = async (action: 'everyone' | 'me' | 'react', emoji?: string) => {
-    if (!selectedMsg || !id || !currentUser) return;
-    setMenuVisible(false);
-    try {
-      if (action === 'everyone' && selectedMsg.sender_id === currentUser.uid) {
-        await deleteMessageForEveryone(id, selectedMsg.id);
-      } else if (action === 'me') {
-        await deleteMessageForMe(id, selectedMsg.id, currentUser.uid);
-      } else if (action === 'react' && emoji) {
-        await addReaction(id, selectedMsg.id, currentUser.uid, emoji);
-      }
-    } catch (e) { Alert.alert("Error", "Action blocked."); }
-  };
-
-  const openNode = (url: string) => {
-    if (!url) return;
-    Linking.openURL(url).catch(() => Alert.alert("Error", "Could not open link."));
-  };
-
-  const handleBack = () => {
-    if (Platform.OS === 'web' && typeof document !== 'undefined') {
-      if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
-    }
-    router.replace('/home');
   };
 
   const renderMessage = ({ item }: { item: any }) => {
     const isMine = item.sender_id === auth.currentUser?.uid;
     const reactions = Object.values(item.reactions || {});
-
     return (
       <TouchableOpacity
         activeOpacity={0.9}
         onLongPress={() => { setSelectedMsg(item); setMenuVisible(true); }}
-        onPress={() => item.fileUrl && openNode(item.fileUrl)}
+        onPress={() => item.fileUrl && Linking.openURL(item.fileUrl)}
         style={[styles.msgRow, isMine && styles.msgRowMine]}
       >
         <View style={[styles.msgBubble, isMine ? styles.msgBubbleMine : styles.msgBubbleOther]}>
-          {!isMine && (
-            <View style={styles.senderHeader}>
-              <View style={[styles.statusIndicator, { backgroundColor: targetAgent?.isOnline ? COLORS.terminal_green : COLORS.critical_red }]} />
-              <Text style={styles.msgSender}>{item.sender_alias}</Text>
-            </View>
-          )}
+          {!isMine && <Text style={styles.msgSender}>{item.sender_alias}</Text>}
           {item.type === 'image' ? (
-            <Image source={{ uri: item.fileUrl }} style={styles.msgImage} resizeMode="contain" />
+            <Image source={{ uri: item.fileUrl }} style={styles.msgImage} resizeMode="cover" />
           ) : item.type === 'file' ? (
             <View style={styles.fileBox}>
               <Paperclip size={16} color={isMine ? "#000" : COLORS.terminal_green} />
               <Text style={[styles.fileText, isMine && {color: "#000"}]}>TACTICAL_INTEL.DAT</Text>
             </View>
-          ) : item.type === 'system' ? (
-            <Text style={styles.systemMsg}>{item.content}</Text>
           ) : (
-            <Text style={[styles.msgText, isMine && styles.msgTextMine]} selectable={false}>{item.content}</Text>
+            <Text style={[styles.msgText, isMine && styles.msgTextMine]}>{item.content}</Text>
           )}
-          {reactions.length > 0 && <View style={styles.reactionBadge}><Text style={{fontSize: 10}}>{reactions.join('')}</Text></View>}
+          {reactions.length > 0 && <View style={styles.reactionBadge}><Text style={styles.reactionText}>{reactions.join('')}</Text></View>}
           <View style={styles.msgMeta}>
-            {item.self_destruct_seconds && <Clock size={10} color={isMine ? "#000" : COLORS.critical_red} />}
-            <Lock size={10} color={isMine ? "rgba(0,0,0,0.4)" : COLORS.terminal_green} />
+            <Lock size={8} color={isMine ? "rgba(0,0,0,0.4)" : COLORS.terminal_green} />
             <Text style={[styles.msgTime, isMine && {color: 'rgba(0,0,0,0.4)'}]}>
               {item.created_at.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
             </Text>
@@ -221,17 +174,12 @@ export default function ChatDetail() {
     );
   };
 
-  if (loading) return <View style={styles.loading}><ActivityIndicator color={COLORS.terminal_green} /></View>;
-
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={handleBack} style={styles.headerBtn}><ChevronLeft size={24} color="#FFF" /></TouchableOpacity>
+        <TouchableOpacity onPress={() => router.replace('/home')} style={styles.headerBtn}><ChevronLeft size={24} color="#FFF" /></TouchableOpacity>
         <View style={styles.headerCenter}>
-          <View style={styles.nameRow}>
-            <View style={[styles.statusIndicatorHeader, { backgroundColor: targetAgent?.isOnline ? COLORS.terminal_green : COLORS.critical_red }]} />
-            <Text style={styles.headerTitle}>{targetAgent?.alias?.toUpperCase() || "AGENT"}</Text>
-          </View>
+          <Text style={styles.headerTitle}>{targetAgent?.alias?.toUpperCase() || "AGENT"}</Text>
           <Text style={[styles.headerStatus, { color: targetAgent?.isOnline ? COLORS.terminal_green : COLORS.critical_red }]}>
             {typingAgents.length > 0 ? "AGENT COMPOSING..." : (targetAgent?.isOnline ? "SECURE LINK ACTIVE" : "OFFLINE")}
           </Text>
@@ -244,26 +192,26 @@ export default function ChatDetail() {
 
       <FlatList ref={flatListRef} data={messages} renderItem={renderMessage} keyExtractor={item => item.id} contentContainerStyle={styles.list} onContentSizeChange={() => flatListRef.current?.scrollToEnd()} />
 
-      {sendingMedia && (
-        <View style={styles.progress}>
-          <ActivityIndicator color={COLORS.terminal_green} size="small" />
-          <Text style={styles.progressText}>DISPATCHING: {uploadProgress.toFixed(0)}%</Text>
+      {emojiBarVisible && (
+        <View style={styles.emojiBarWrapper}>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.emojiBarContent}>
+            {ALL_EMOJIS.map((e, index) => (
+              <TouchableOpacity key={index} onPress={() => setInput(prev => prev + e)} style={styles.quickEmojiBtn}>
+                <Text style={styles.emojiText}>{e}</Text>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
         </View>
       )}
 
-      <View style={styles.timerRow}>
-        <Clock size={12} color={COLORS.muted_text} />
-        {[null, 10, 30, 60].map((t) => (
-          <TouchableOpacity key={String(t)} style={[styles.timerOption, selfDestruct === t && styles.timerOptionActive]} onPress={() => setSelfDestruct(t)}>
-            <Text style={[styles.timerOptionText, selfDestruct === t && styles.timerOptionTextActive]}>{t ? t+'s' : 'OFF'}</Text>
-          </TouchableOpacity>
-        ))}
-      </View>
-
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
         <View style={styles.inputArea}>
-          <TouchableOpacity onPress={() => pickMedia('image')} style={styles.iconBtn}><ImageIcon size={22} color={COLORS.terminal_green} /></TouchableOpacity>
-          <TouchableOpacity onPress={() => pickMedia('file')} style={styles.iconBtn}><Paperclip size={22} color={COLORS.terminal_green} /></TouchableOpacity>
+          <TouchableOpacity onPress={() => setEmojiBarVisible(!emojiBarVisible)} style={styles.iconBtn}>
+            <Smile size={22} color={emojiBarVisible ? COLORS.terminal_green : "#888"} />
+          </TouchableOpacity>
+          <TouchableOpacity onPress={() => { setGiphyVisible(true); searchGiphy(); }} style={styles.iconBtn}>
+            <Search size={22} color="#888" />
+          </TouchableOpacity>
           <TextInput
             style={styles.input} value={input}
             onChangeText={(t) => { setInput(t); setTypingStatus(id!, currentUser!.uid, t.length > 0); }}
@@ -273,18 +221,42 @@ export default function ChatDetail() {
         </View>
       </KeyboardAvoidingView>
 
+      <Modal visible={giphyVisible} transparent animationType="slide">
+        <SafeAreaView style={styles.giphyOverlay}>
+          <View style={styles.giphyHeader}>
+            <View style={styles.giphySearchBox}>
+              <Search size={18} color="#666" />
+              <TextInput style={styles.giphyInput} placeholder="SEARCH GIPHY..." placeholderTextColor="#666" value={giphyQuery} onChangeText={setGiphyQuery} onSubmitEditing={searchGiphy} autoFocus />
+            </View>
+            <TouchableOpacity onPress={() => setGiphyVisible(false)}><Text style={styles.exitText}>EXIT</Text></TouchableOpacity>
+          </View>
+          {giphyLoading ? (
+            <View style={styles.giphyLoading}><ActivityIndicator color={COLORS.terminal_green} /></View>
+          ) : (
+            <ScrollView contentContainerStyle={styles.gifGrid}>
+              {gifs.map((gif, i) => (
+                <TouchableOpacity key={i} onPress={() => { handleSendMessage('image', gif.images.fixed_height.url); setGiphyVisible(false); }}>
+                  <Image source={{ uri: gif.images.fixed_height.url }} style={styles.gifThumb} />
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          )}
+        </SafeAreaView>
+      </Modal>
+
       <Modal visible={menuVisible} transparent animationType="fade">
         <TouchableOpacity style={styles.menuOverlay} activeOpacity={1} onPress={() => setMenuVisible(false)}>
           <View style={styles.menuContent}>
             <View style={styles.reactionRow}>
-              {['👍', '❤️', '😮', '😂', '🔥', '🎯'].map(emoji => (
-                <TouchableOpacity key={emoji} onPress={() => handleAction('react', emoji)} style={styles.emojiBtn}><Text style={{fontSize: 24}}>{emoji}</Text></TouchableOpacity>
+              {ALL_EMOJIS.slice(0,6).map((emoji, index) => (
+                <TouchableOpacity key={index} onPress={async () => { await addReaction(id!, selectedMsg.id, currentUser!.uid, emoji); setMenuVisible(false); }} style={styles.emojiBtn}>
+                  <Text style={styles.emojiTextLarge}>{emoji}</Text>
+                </TouchableOpacity>
               ))}
             </View>
-            <TouchableOpacity style={styles.menuItem} onPress={() => handleAction('me')}><Trash2 size={18} color="#FFF" /><Text style={styles.menuText}>DELETE FOR ME</Text></TouchableOpacity>
-            {selectedMsg?.sender_id === currentUser?.uid && (
-              <TouchableOpacity style={[styles.menuItem, {borderTopWidth: 1, borderTopColor: '#222'}]} onPress={() => handleAction('everyone')}><ShieldAlert size={18} color={COLORS.critical_red} /><Text style={[styles.menuText, {color: COLORS.critical_red}]}>DELETE FOR EVERYONE</Text></TouchableOpacity>
-            )}
+            <TouchableOpacity style={styles.menuItem} onPress={async () => { await deleteMessageForMe(id!, selectedMsg.id, currentUser!.uid); setMenuVisible(false); }}>
+              <Trash2 size={18} color="#FFF" /><Text style={styles.menuText}>DELETE FOR ME</Text>
+            </TouchableOpacity>
           </View>
         </TouchableOpacity>
       </Modal>
@@ -294,12 +266,9 @@ export default function ChatDetail() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#050505' },
-  loading: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#050505' },
   header: { flexDirection: 'row', alignItems: 'center', padding: 16, borderBottomWidth: 1, borderBottomColor: '#222', backgroundColor: '#121212' },
   headerBtn: { padding: 8 },
   headerCenter: { flex: 1, marginLeft: 16 },
-  nameRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  statusIndicatorHeader: { width: 8, height: 8, borderRadius: 4 },
   headerTitle: { color: '#FFF', fontSize: 14, fontWeight: '900', fontFamily: 'monospace' },
   headerStatus: { fontSize: 8, fontFamily: 'monospace', marginTop: 2, letterSpacing: 1 },
   headerActions: { flexDirection: 'row', gap: 12 },
@@ -307,36 +276,40 @@ const styles = StyleSheet.create({
   list: { padding: 12 },
   msgRow: { marginBottom: 12, alignItems: 'flex-start' },
   msgRowMine: { alignItems: 'flex-end' },
-  msgBubble: { maxWidth: '85%', padding: 12, borderRadius: 2, position: 'relative' },
+  msgBubble: { maxWidth: '85%', padding: 12, borderRadius: 4, position: 'relative' },
   msgBubbleMine: { backgroundColor: COLORS.terminal_green },
   msgBubbleOther: { backgroundColor: '#121212', borderLeftWidth: 3, borderLeftColor: COLORS.terminal_green },
-  senderHeader: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 4 },
-  statusIndicator: { width: 6, height: 6, borderRadius: 3 },
-  msgSender: { color: COLORS.terminal_green, fontSize: 9, fontWeight: '700', fontFamily: 'monospace' },
+  msgSender: { color: COLORS.terminal_green, fontSize: 9, fontWeight: '700', fontFamily: 'monospace', marginBottom: 4 },
   msgText: { color: '#FFF', fontSize: 14, lineHeight: 20 },
   msgTextMine: { color: '#000', fontWeight: '600' },
-  msgImage: { width: 240, height: 240, borderRadius: 2, marginBottom: 8 },
+  msgImage: { width: 200, height: 200, borderRadius: 4 },
   fileBox: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: 'rgba(0,0,0,0.1)', padding: 10 },
   fileText: { color: COLORS.terminal_green, fontSize: 12, fontFamily: 'monospace' },
-  systemMsg: { color: COLORS.alert_amber, fontSize: 11, fontFamily: 'monospace', fontStyle: 'italic' },
   msgMeta: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 6, justifyContent: 'flex-end' },
   msgTime: { fontSize: 8, color: '#666', fontFamily: 'monospace' },
-  progress: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10, padding: 8, backgroundColor: '#121212' },
-  progressText: { color: COLORS.terminal_green, fontSize: 10, fontFamily: 'monospace' },
-  timerRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 12, paddingVertical: 8, backgroundColor: '#121212', borderTopWidth: 1, borderTopColor: '#222' },
-  timerOption: { paddingHorizontal: 8, paddingVertical: 4, borderWidth: 1, borderColor: '#333' },
-  timerOptionActive: { borderColor: COLORS.critical_red, backgroundColor: 'rgba(255,0,0,0.1)' },
-  timerOptionText: { color: '#666', fontSize: 9, fontFamily: 'monospace' },
-  timerOptionTextActive: { color: COLORS.critical_red, fontWeight: '700' },
   inputArea: { flexDirection: 'row', alignItems: 'center', padding: 12, gap: 10, borderTopWidth: 1, borderTopColor: '#222', backgroundColor: '#121212' },
+  emojiBarWrapper: { backgroundColor: '#121212', borderTopWidth: 1, borderTopColor: '#222', height: 60 },
+  emojiBarContent: { paddingHorizontal: 15, alignItems: 'center', gap: 20 },
+  quickEmojiBtn: { justifyContent: 'center', alignItems: 'center' },
+  emojiText: { fontSize: 26, color: '#FFF' },
+  emojiTextLarge: { fontSize: 32, color: '#FFF' },
   iconBtn: { padding: 4 },
-  input: { flex: 1, backgroundColor: '#000', color: '#FFF', padding: 10, fontFamily: 'monospace' },
-  sendBtn: { width: 44, height: 44, backgroundColor: COLORS.terminal_green, borderRadius: 2, alignItems: 'center', justifyContent: 'center' },
+  input: { flex: 1, backgroundColor: '#000', color: '#FFF', padding: 10, fontFamily: 'monospace', borderRadius: 4 },
+  sendBtn: { width: 44, height: 44, backgroundColor: COLORS.terminal_green, borderRadius: 4, alignItems: 'center', justifyContent: 'center' },
   menuOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.8)', justifyContent: 'center', alignItems: 'center' },
   menuContent: { width: '80%', backgroundColor: '#121212', borderRadius: 4, padding: 20, borderWidth: 1, borderColor: '#333' },
-  reactionRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 24 },
-  emojiBtn: { padding: 8 },
+  reactionRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 20 },
+  emojiBtn: { padding: 5 },
   menuItem: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 16 },
   menuText: { color: '#FFF', fontSize: 13, fontWeight: '700', fontFamily: 'monospace' },
-  reactionBadge: { position: 'absolute', bottom: -10, right: 10, backgroundColor: '#1A1A1A', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 10, borderWidth: 1, borderColor: '#333' }
+  reactionBadge: { position: 'absolute', bottom: -8, right: 10, backgroundColor: '#1A1A1A', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 10, borderWidth: 1, borderColor: '#333' },
+  reactionText: { fontSize: 10, color: '#FFF' },
+  giphyOverlay: { flex: 1, backgroundColor: '#050505' },
+  giphyHeader: { flexDirection: 'row', padding: 16, alignItems: 'center', gap: 15, borderBottomWidth: 1, borderBottomColor: '#222' },
+  giphySearchBox: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: '#121212', paddingHorizontal: 12, borderRadius: 4 },
+  giphyInput: { flex: 1, height: 44, color: '#FFF', fontFamily: 'monospace', fontSize: 12 },
+  giphyLoading: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+  exitText: { color: COLORS.critical_red, fontWeight: '900', fontFamily: 'monospace' },
+  gifGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, padding: 8, justifyContent: 'center' },
+  gifThumb: { width: (width / 2) - 16, height: 120, borderRadius: 4, backgroundColor: '#111' }
 });
