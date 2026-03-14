@@ -8,8 +8,6 @@ import { LogIn, UserPlus, ShieldCheck, Zap } from 'lucide-react-native';
 import { COLORS } from '../src/constants';
 import { auth } from '../src/firebase';
 
-const { width } = Dimensions.get('window');
-
 export default function OnboardingScreen() {
   const router = useRouter();
   const [checking, setChecking] = useState(true);
@@ -35,6 +33,16 @@ export default function OnboardingScreen() {
       Animated.timing(fadeAnim, { toValue: 1, duration: 1200, useNativeDriver: Platform.OS !== 'web' }),
       Animated.timing(slideAnim, { toValue: 0, duration: 1000, useNativeDriver: Platform.OS !== 'web' }),
     ]).start();
+  };
+
+  const navigateSecurely = (path: string) => {
+    // 🛡️ Web Accessibility Fix: Clear focus before navigation to prevent aria-hidden errors
+    if (Platform.OS === 'web' && typeof document !== 'undefined') {
+      if (document.activeElement instanceof HTMLElement) {
+        document.activeElement.blur();
+      }
+    }
+    router.push(path as any);
   };
 
   if (checking) {
@@ -67,7 +75,7 @@ export default function OnboardingScreen() {
         <View style={styles.actions}>
           <TouchableOpacity
             style={styles.primaryBtn}
-            onPress={() => router.push('/register-pseudonym')}
+            onPress={() => navigateSecurely('/register-pseudonym')}
             activeOpacity={0.8}
           >
             <UserPlus size={20} color={COLORS.void_black} />
@@ -76,7 +84,7 @@ export default function OnboardingScreen() {
 
           <TouchableOpacity
             style={styles.secondaryBtn}
-            onPress={() => router.push('/login')}
+            onPress={() => navigateSecurely('/login')}
             activeOpacity={0.8}
           >
             <LogIn size={20} color={COLORS.terminal_green} />

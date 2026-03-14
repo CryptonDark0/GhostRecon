@@ -7,8 +7,12 @@ import { useRouter } from "expo-router";
 import { ChevronLeft, LogIn, Key, Eye, EyeOff } from "lucide-react-native";
 import { COLORS } from "../src/constants";
 import { signInWithEmailAndPassword, sendPasswordResetEmail } from "firebase/auth";
-import { auth } from "../src/firebase";
+import { auth, db } from "../src/firebase";
 import { setToken } from "../src/api";
+import { doc, getDoc } from "firebase/firestore";
+import AsyncStorage from '@react-native-async-storage/async-storage';
+
+const PROFILE_CACHE_KEY = 'ghostrecon_user_profile';
 
 export default function LoginScreen() {
   const router = useRouter();
@@ -31,6 +35,12 @@ export default function LoginScreen() {
       showAlert("Required", "Please enter both email and passphrase.");
       return;
     }
+
+    // 🛡️ Web Accessibility Fix: Clear focus before starting process
+    if (Platform.OS === 'web' && typeof document !== 'undefined') {
+      if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
+    }
+
     setLoading(true);
     try {
       const userCredential = await signInWithEmailAndPassword(auth, email.trim(), password);
@@ -38,8 +48,15 @@ export default function LoginScreen() {
 
       if (!user.emailVerified) {
         setLoading(false);
-        showAlert("Identity Unverified", "Please check your email and verify your identity before full handshake.");
+        showAlert("Identity Unverified", "Please verify your email before full handshake.");
         return;
+      }
+
+      // 🛡️ PRE-NAVIGATION PROFILE LOCK: Fetch name before going home
+      const docSnap = await getDoc(doc(db, "users", user.uid));
+      if (docSnap.exists()) {
+        const profileData = docSnap.data();
+        await AsyncStorage.setItem(PROFILE_CACHE_KEY, JSON.stringify(profileData));
       }
 
       await setToken(user.uid);
@@ -82,7 +99,7 @@ export default function LoginScreen() {
       >
         <View style={styles.header}>
           <TouchableOpacity
-            onPress={() => router.back()}
+            onPress={() => router.replace('/')}
             activeOpacity={0.7}
             style={styles.backBtn}
           >
@@ -123,7 +140,7 @@ export default function LoginScreen() {
             <Text style={styles.label}>SECURITY PASSPHRASE</Text>
             <View style={styles.passwordContainer}>
               <TextInput
-                style={[styles.input, { flex: 1, borderBottomWidth: 0, marginBottom: 0 }]}
+                style={[styles.input, { flex: 1, borderBottomWidth: 0, marginBottom: 0, borderWidth: 0 }]}
                 value={password}
                 onChangeText={setPassword}
                 placeholder="Enter secure passphrase"

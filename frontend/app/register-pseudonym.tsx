@@ -4,12 +4,12 @@ import {
   TextInput, ActivityIndicator, Alert, KeyboardAvoidingView, Platform, ScrollView, Keyboard, Image
 } from 'react-native';
 import { useRouter } from 'expo-router';
-import { ChevronLeft, Shield, Eye, EyeOff, Check, X } from 'lucide-react-native';
+import { ChevronLeft, Eye, EyeOff, Check, X } from 'lucide-react-native';
 import { COLORS } from '../src/constants';
 import { createUserWithEmailAndPassword, deleteUser, sendEmailVerification, signOut } from 'firebase/auth';
 import { doc, setDoc, serverTimestamp, collection, query, where, getDocs } from 'firebase/firestore';
 import { auth, db } from '../src/firebase';
-import { setToken, clearToken } from '../src/api';
+import { clearToken } from '../src/api';
 import { getOrCreateKeyPair } from '../src/encryption';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
@@ -23,14 +23,14 @@ export default function RegisterPseudonym() {
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
 
-  // ENSURE CLEAN STATE
+  // ENSURE CLEAN STATE: Completely wipe any local ghost data before starting
   useEffect(() => {
-    const forceWipe = async () => {
+    const forceCleanup = async () => {
       await signOut(auth).catch(() => {});
       await clearToken().catch(() => {});
       await AsyncStorage.clear().catch(() => {});
     };
-    forceWipe();
+    forceCleanup();
   }, []);
 
   const validatePassword = (pass: string) => {
@@ -56,6 +56,12 @@ export default function RegisterPseudonym() {
 
   const handleRegister = async () => {
     Keyboard.dismiss();
+
+    // 🛡️ Web Accessibility Fix: Clear focus before starting process
+    if (Platform.OS === 'web' && typeof document !== 'undefined') {
+      if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
+    }
+
     const trimmedAlias = alias.trim();
     const trimmedEmail = email.trim().toLowerCase();
 
@@ -75,26 +81,30 @@ export default function RegisterPseudonym() {
     }
 
     setLoading(true);
+    console.log("[GHOST-PROTOCOL] Starting Identity Validation...");
+
     try {
-      // 1. Check Alias Uniqueness
+      // 1. PRE-CHECK: Verify Alias Uniqueness before doing anything else
       const usersRef = collection(db, "users");
       const q = query(usersRef, where("alias_lowercase", "==", trimmedAlias.toLowerCase()));
       const querySnapshot = await getDocs(q);
 
       if (!querySnapshot.empty) {
         setLoading(false);
-        showAlert('Alias Taken', 'This tactical alias is already assigned.');
+        showAlert('Alias Taken', 'This codename is already assigned to another active agent. If you just deleted an account, please wait 5 seconds.');
         return;
       }
 
-      // 2. Auth Identity
+      // 2. Create Auth Identity
       const userCredential = await createUserWithEmailAndPassword(auth, trimmedEmail, password);
       const user = userCredential.user;
 
       try {
+        // 3. Dispatch Verification
         await sendEmailVerification(user);
         const keyPair = await getOrCreateKeyPair();
 
+        // 4. Persist Profile
         await setDoc(doc(db, "users", user.uid), {
           alias: trimmedAlias,
           alias_lowercase: trimmedAlias.toLowerCase(),
@@ -108,19 +118,23 @@ export default function RegisterPseudonym() {
           isSubscribed: false
         });
 
+        // 5. Cleanup session for verification handshake
         await signOut(auth);
         await clearToken();
         setLoading(false);
-        showAlert('HANDSHAKE PENDING', 'Verification link dispatched to Gmail. Please verify before signing in.');
+        showAlert('VERIFICATION SENT', 'Handshake link dispatched to Gmail. You MUST verify before signing in.');
         router.replace('/');
 
       } catch (innerErr: any) {
+        console.error("[GHOST-PROTOCOL] Rollback triggered:", innerErr);
         await deleteUser(user).catch(() => {});
         throw innerErr;
       }
     } catch (err: any) {
       setLoading(false);
-      showAlert('Handshake Failed', err.message);
+      let msg = err.message;
+      if (err.code === 'auth/email-already-in-use') msg = "This email is already linked to an active identity.";
+      showAlert('Handshake Failed', msg);
     }
   };
 
@@ -165,7 +179,7 @@ export default function RegisterPseudonym() {
             <View style={styles.inputGroup}>
               <Text style={styles.label}>SECURITY PASSPHRASE</Text>
               <View style={styles.passwordContainer}>
-                <TextInput style={[styles.input, { flex: 1, marginBottom: 0 }]} value={password} onChangeText={setPassword} placeholder="Tactical Passphrase" placeholderTextColor="#444" secureTextEntry={!showPassword} autoComplete="new-password" />
+                <TextInput style={[styles.input, { flex: 1, marginBottom: 0, borderWidth: 0 }]} value={password} onChangeText={setPassword} placeholder="Tactical Passphrase" placeholderTextColor="#444" secureTextEntry={!showPassword} autoComplete="new-password" />
                 <TouchableOpacity onPress={() => setShowPassword(!showPassword)} style={styles.eyeBtn}>
                   {showPassword ? <EyeOff size={20} color={COLORS.terminal_green} /> : <Eye size={20} color={COLORS.terminal_green} />}
                 </TouchableOpacity>
@@ -173,7 +187,7 @@ export default function RegisterPseudonym() {
               <View style={styles.requirementsContainer}>
                 <Requirement label="At least 6 characters" met={passStatus.length} />
                 <Requirement label="Uppercase letter" met={passStatus.upper} />
-                <Requirement label="Lowercase letter" met={passStatus.lower} />
+                <Requirement label="Lowercase letter" met={met = passStatus.lower} />
                 <Requirement label="Number" met={passStatus.number} />
                 <Requirement label="Special character" met={passStatus.special} />
               </View>
