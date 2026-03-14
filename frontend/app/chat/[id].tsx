@@ -4,7 +4,7 @@ import {
   FlatList, TextInput, KeyboardAvoidingView, Platform, ActivityIndicator, Alert, Image, Modal
 } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
-import { ChevronLeft, Send, Lock, Phone, Video, ImageIcon, Paperclip, Clock, Trash2, Smile, ShieldAlert } from 'lucide-react-native';
+import { ChevronLeft, Send, Lock, Phone, Video, ImageIcon, Paperclip, Clock, Trash2, ShieldAlert } from 'lucide-react-native';
 import { COLORS } from '../../src/constants';
 import { auth, db } from '../../src/firebase';
 import { doc, getDoc, onSnapshot, collection, query, orderBy, addDoc, serverTimestamp, updateDoc, deleteDoc } from 'firebase/firestore';
@@ -23,7 +23,7 @@ export default function ChatDetail() {
   const [uploadProgress, setUploadProgress] = useState(0);
   const [typingAgents, setTypingAgents] = useState<string[]>([]);
   const [selfDestruct, setSelfDestruct] = useState<number | null>(null);
-  const [selectedMsg, setSelectedItem] = useState<any>(null);
+  const [selectedMsg, setSelectedMsg] = useState<any>(null);
   const [menuVisible, setMenuVisible] = useState(false);
 
   const flatListRef = useRef<FlatList>(null);
@@ -41,22 +41,17 @@ export default function ChatDetail() {
         markAsRead(id, currentUser.uid);
 
         unsubscribeMessages = onSnapshot(query(collection(db, "conversations", id, "messages"), orderBy("created_at", "asc")), (snapshot) => {
-          const allMsgs = snapshot.docs.map(doc => ({
-            id: doc.id,
-            ...doc.data() as any
-          }));
-
-          // Client-side filter for 'Delete for Me'
+          const allMsgs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() as any }));
           const filtered = allMsgs.filter(m => !m.hiddenFor?.includes(currentUser.uid))
             .map(m => ({ ...m, created_at: m.created_at?.toDate() || new Date() }));
-
           setMessages(filtered);
           setLoading(false);
         });
 
         unsubscribeConv = onSnapshot(doc(db, "conversations", id), async (docSnap) => {
           if (docSnap.exists()) {
-            const targetId = docSnap.data().participants.find((p: string) => p !== currentUser.uid);
+            const data = docSnap.data();
+            const targetId = data.participants.find((p: string) => p !== currentUser.uid);
             onSnapshot(doc(db, "users", targetId), (targetSnap) => {
               if (targetSnap.exists()) setTargetAgent({ uid: targetSnap.id, ...targetSnap.data() });
             });
@@ -79,7 +74,6 @@ export default function ChatDetail() {
     };
   }, [id]);
 
-  // SELF-DESTRUCT Engine
   useEffect(() => {
     const timeouts: any[] = [];
     messages.forEach(msg => {
@@ -87,11 +81,9 @@ export default function ChatDetail() {
         const expiry = msg.created_at.getTime() + (msg.self_destruct_seconds * 1000);
         const diff = expiry - Date.now();
         if (diff <= 0) {
-          deleteDoc(doc(db, "conversations", id as string, "messages", msg.id));
+          deleteDoc(doc(db, "conversations", id as string, "messages", msg.id)).catch(()=>{});
         } else {
-          timeouts.push(setTimeout(() => {
-            deleteDoc(doc(db, "conversations", id as string, "messages", msg.id));
-          }, diff));
+          timeouts.push(setTimeout(() => deleteDoc(doc(db, "conversations", id as string, "messages", msg.id)).catch(()=>{}), diff));
         }
       }
     });
@@ -120,26 +112,40 @@ export default function ChatDetail() {
         lastMessageAt: serverTimestamp(),
         lastMessage: type === 'text' ? text : `[Tactical ${type}]`
       });
-    } catch (err) { Alert.alert("Link Failed", "Encryption handshake failed."); }
+    } catch (err) { Alert.alert("Link Failed", "Handshake failed."); }
+  };
+
+  const pickMedia = async (mode: 'image' | 'file') => {
+    if (!currentUser) return;
+    try {
+      let result;
+      if (mode === 'image') {
+        result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ImagePicker.MediaTypeOptions.Images, quality: 0.4 });
+      } else {
+        result = await DocumentPicker.getDocumentAsync({ type: '*/*' });
+      }
+
+      if (!result.canceled && result.assets[0]) {
+        setSendingMedia(true);
+        const media = await uploadMedia(currentUser.uid, result.assets[0].uri, mode, setUploadProgress);
+        await handleSendMessage(mode, media.url, media.size, media.path);
+      }
+    } catch (e: any) { Alert.alert("Handshake Error", "Media dispatch failed."); }
+    finally { setSendingMedia(false); setUploadProgress(0); }
   };
 
   const handleAction = async (action: 'everyone' | 'me' | 'react', emoji?: string) => {
     if (!selectedMsg || !id || !currentUser) return;
     setMenuVisible(false);
-
     try {
-      if (action === 'everyone') {
-        if (selectedMsg.sender_id !== currentUser.uid) {
-          Alert.alert("Denied", "You can only wipe your own transmissions for everyone.");
-          return;
-        }
+      if (action === 'everyone' && selectedMsg.sender_id === currentUser.uid) {
         await deleteMessageForEveryone(id, selectedMsg.id);
       } else if (action === 'me') {
         await deleteMessageForMe(id, selectedMsg.id, currentUser.uid);
       } else if (action === 'react' && emoji) {
         await addReaction(id, selectedMsg.id, currentUser.uid, emoji);
       }
-    } catch (e) { Alert.alert("Error", "Action blocked by security protocol."); }
+    } catch (e) { Alert.alert("Error", "Action blocked."); }
   };
 
   const renderMessage = ({ item }: { item: any }) => {
@@ -149,12 +155,11 @@ export default function ChatDetail() {
     return (
       <TouchableOpacity
         activeOpacity={0.9}
-        onLongPress={() => { setSelectedItem(item); setMenuVisible(true); }}
+        onLongPress={() => { setSelectedMsg(item); setMenuVisible(true); }}
         style={[styles.msgRow, isMine && styles.msgRowMine]}
       >
         <View style={[styles.msgBubble, isMine ? styles.msgBubbleMine : styles.msgBubbleOther]}>
           {!isMine && <Text style={styles.msgSender}>{item.sender_alias}</Text>}
-
           {item.type === 'image' ? (
             <TouchableOpacity onPress={() => item.fileUrl && window.open(item.fileUrl, '_blank')}>
               <Image source={{ uri: item.fileUrl }} style={styles.msgImage} resizeMode="contain" />
@@ -167,20 +172,9 @@ export default function ChatDetail() {
           ) : (
             <Text style={[styles.msgText, isMine && styles.msgTextMine]} selectable={false}>{item.content}</Text>
           )}
-
-          {reactions.length > 0 && (
-            <View style={styles.reactionBadge}>
-              <Text style={styles.reactionText}>{reactions.join('')}</Text>
-            </View>
-          )}
-
+          {reactions.length > 0 && <View style={styles.reactionBadge}><Text style={{fontSize: 10}}>{reactions.join('')}</Text></View>}
           <View style={styles.msgMeta}>
-            {item.self_destruct_seconds && (
-              <View style={styles.timerBadge}>
-                <Clock size={10} color={isMine ? "#000" : COLORS.critical_red} />
-                <Text style={[styles.timerText, isMine && {color: "#000"}]}>{item.self_destruct_seconds}s</Text>
-              </View>
-            )}
+            {item.self_destruct_seconds && <Clock size={10} color={isMine ? "#000" : COLORS.critical_red} />}
             <Lock size={10} color={isMine ? "rgba(0,0,0,0.4)" : COLORS.terminal_green} />
             <Text style={[styles.msgTime, isMine && {color: 'rgba(0,0,0,0.4)'}]}>
               {item.created_at.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
@@ -195,9 +189,10 @@ export default function ChatDetail() {
 
   return (
     <SafeAreaView style={styles.container}>
-      {/* HEADER */}
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()}><ChevronLeft size={24} color="#FFF" /></TouchableOpacity>
+        <TouchableOpacity onPress={() => router.replace('/home')} style={styles.headerBtn}>
+          <ChevronLeft size={24} color="#FFF" />
+        </TouchableOpacity>
         <View style={styles.headerCenter}>
           <Text style={styles.headerTitle}>{targetAgent?.alias?.toUpperCase()}</Text>
           <Text style={[styles.headerStatus, { color: targetAgent?.isOnline ? COLORS.terminal_green : COLORS.muted_text }]}>
@@ -205,23 +200,12 @@ export default function ChatDetail() {
           </Text>
         </View>
         <View style={styles.headerActions}>
-          <TouchableOpacity style={styles.headerIconBtn} onPress={() => router.push(`/call/voice?target=${targetAgent?.uid}`)}>
-            <Phone size={18} color={COLORS.terminal_green} />
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.headerIconBtn} onPress={() => router.push(`/call/video?target=${targetAgent?.uid}`)}>
-            <Video size={18} color={COLORS.terminal_green} />
-          </TouchableOpacity>
+          <TouchableOpacity style={styles.headerIconBtn} onPress={() => router.push(`/call/voice?target=${targetAgent?.uid}`)}><Phone size={18} color={COLORS.terminal_green} /></TouchableOpacity>
+          <TouchableOpacity style={styles.headerIconBtn} onPress={() => router.push(`/call/video?target=${targetAgent?.uid}`)}><Video size={18} color={COLORS.terminal_green} /></TouchableOpacity>
         </View>
       </View>
 
-      <FlatList
-        ref={flatListRef}
-        data={messages}
-        renderItem={renderMessage}
-        keyExtractor={item => item.id}
-        contentContainerStyle={styles.list}
-        onContentSizeChange={() => flatListRef.current?.scrollToEnd()}
-      />
+      <FlatList ref={flatListRef} data={messages} renderItem={renderMessage} keyExtractor={item => item.id} contentContainerStyle={styles.list} onContentSizeChange={() => flatListRef.current?.scrollToEnd()} />
 
       {sendingMedia && (
         <View style={styles.progress}>
@@ -230,7 +214,6 @@ export default function ChatDetail() {
         </View>
       )}
 
-      {/* TACTICAL TOOLS */}
       <View style={styles.timerRow}>
         <Clock size={12} color={COLORS.muted_text} />
         {[null, 10, 30, 60].map((t) => (
@@ -242,39 +225,29 @@ export default function ChatDetail() {
 
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
         <View style={styles.inputArea}>
-          <TouchableOpacity onPress={() => {}} style={styles.iconBtn}><ImageIcon size={22} color={COLORS.terminal_green} /></TouchableOpacity>
-          <TouchableOpacity onPress={() => {}} style={styles.iconBtn}><Paperclip size={22} color={COLORS.terminal_green} /></TouchableOpacity>
+          <TouchableOpacity onPress={() => pickMedia('image')} style={styles.iconBtn}><ImageIcon size={22} color={COLORS.terminal_green} /></TouchableOpacity>
+          <TouchableOpacity onPress={() => pickMedia('file')} style={styles.iconBtn}><Paperclip size={22} color={COLORS.terminal_green} /></TouchableOpacity>
           <TextInput
-            style={styles.input}
-            value={input}
+            style={styles.input} value={input}
             onChangeText={(t) => { setInput(t); setTypingStatus(id!, currentUser!.uid, t.length > 0); }}
-            placeholder="Type tactical intel..."
-            placeholderTextColor="#444"
-            multiline
+            placeholder="Type tactical intel..." placeholderTextColor="#444" multiline
           />
           <TouchableOpacity onPress={() => handleSendMessage()} style={styles.sendBtn}><Send size={20} color="#000" /></TouchableOpacity>
         </View>
       </KeyboardAvoidingView>
 
-      {/* MESSAGE CONTEXT MENU */}
       <Modal visible={menuVisible} transparent animationType="fade">
         <TouchableOpacity style={styles.menuOverlay} activeOpacity={1} onPress={() => setMenuVisible(false)}>
           <View style={styles.menuContent}>
             <View style={styles.reactionRow}>
               {['👍', '❤️', '😮', '😂', '🔥', '🎯'].map(emoji => (
-                <TouchableOpacity key={emoji} onPress={() => handleAction('react', emoji)} style={styles.emojiBtn}>
-                  <Text style={{fontSize: 24}}>{emoji}</Text>
-                </TouchableOpacity>
+                <TouchableOpacity key={emoji} onPress={() => handleAction('react', emoji)} style={styles.emojiBtn}><Text style={{fontSize: 24}}>{emoji}</Text></TouchableOpacity>
               ))}
             </View>
-            <TouchableOpacity style={styles.menuItem} onPress={() => handleAction('me')}>
-              <Trash2 size={18} color="#FFF" />
-              <Text style={styles.menuText}>DELETE FOR ME</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={[styles.menuItem, {borderTopWidth: 1, borderTopColor: '#222'}]} onPress={() => handleAction('everyone')}>
-              <ShieldAlert size={18} color={COLORS.critical_red} />
-              <Text style={[styles.menuText, {color: COLORS.critical_red}]}>DELETE FOR EVERYONE</Text>
-            </TouchableOpacity>
+            <TouchableOpacity style={styles.menuItem} onPress={() => handleAction('me')}><Trash2 size={18} color="#FFF" /><Text style={styles.menuText}>DELETE FOR ME</Text></TouchableOpacity>
+            {selectedMsg?.sender_id === currentUser?.uid && (
+              <TouchableOpacity style={[styles.menuItem, {borderTopWidth: 1, borderTopColor: '#222'}]} onPress={() => handleAction('everyone')}><ShieldAlert size={18} color={COLORS.critical_red} /><Text style={[styles.menuText, {color: COLORS.critical_red}]}>DELETE FOR EVERYONE</Text></TouchableOpacity>
+            )}
           </View>
         </TouchableOpacity>
       </Modal>
@@ -286,6 +259,7 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#050505' },
   loading: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#050505' },
   header: { flexDirection: 'row', alignItems: 'center', padding: 16, borderBottomWidth: 1, borderBottomColor: '#222', backgroundColor: '#121212' },
+  headerBtn: { padding: 8 },
   headerCenter: { flex: 1, marginLeft: 16 },
   headerTitle: { color: '#FFF', fontSize: 14, fontWeight: '900', fontFamily: 'monospace' },
   headerStatus: { fontSize: 8, fontFamily: 'monospace', marginTop: 2, letterSpacing: 1 },
@@ -318,13 +292,11 @@ const styles = StyleSheet.create({
   iconBtn: { padding: 4 },
   input: { flex: 1, backgroundColor: '#000', color: '#FFF', padding: 10, fontFamily: 'monospace' },
   sendBtn: { width: 44, height: 44, backgroundColor: COLORS.terminal_green, borderRadius: 2, alignItems: 'center', justifyContent: 'center' },
-
   menuOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.8)', justifyContent: 'center', alignItems: 'center' },
   menuContent: { width: '80%', backgroundColor: '#121212', borderRadius: 4, padding: 20, borderWidth: 1, borderColor: '#333' },
   reactionRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 24 },
   emojiBtn: { padding: 8 },
   menuItem: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 16 },
   menuText: { color: '#FFF', fontSize: 13, fontWeight: '700', fontFamily: 'monospace' },
-  reactionBadge: { position: 'absolute', bottom: -10, right: 10, backgroundColor: '#1A1A1A', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 10, borderWidth: 1, borderColor: '#333' },
-  reactionText: { fontSize: 12 }
+  reactionBadge: { position: 'absolute', bottom: -10, right: 10, backgroundColor: '#1A1A1A', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 10, borderWidth: 1, borderColor: '#333' }
 });

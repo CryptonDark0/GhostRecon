@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity, SafeAreaView,
-  FlatList, TextInput, ActivityIndicator, Alert,
+  FlatList, TextInput, ActivityIndicator, Alert, Platform
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { ChevronLeft, Search, MessageSquare } from 'lucide-react-native';
@@ -29,7 +29,6 @@ export default function NewChatScreen() {
       const usersRef = collection(db, "users");
       const searchKey = text.trim().toLowerCase();
 
-      // TACTICAL SEARCH: Uses the indexed alias_lowercase for precision
       const q = query(
         usersRef,
         where("alias_lowercase", ">=", searchKey),
@@ -52,22 +51,19 @@ export default function NewChatScreen() {
 
   const startChat = async (targetUserId: string) => {
     const user = auth.currentUser;
-    if (!user) {
-      Alert.alert("Link Denied", "No active session found. Please sign in.");
-      return;
-    }
+    if (!user) return;
 
     setLinking(true);
-    console.log("[GHOST-SEARCH] Initiating handshake with:", targetUserId);
-
     try {
-      // Find or create the unique secure channel between these two agents
       const conv = await createConversation([user.uid, targetUserId]);
-      console.log("[GHOST-SEARCH] Secure channel established:", conv.id);
       router.replace(`/chat/${conv.id}`);
     } catch (err: any) {
-      console.error("[GHOST-SEARCH] Link failure:", err);
-      Alert.alert('Link Error', "Failed to establish secure channel. Verify network permissions.");
+      console.error("[GHOST-SEARCH] Handshake failed:", err);
+      if (Platform.OS === 'web') {
+        window.alert("LINK FAILURE: Ensure security rules are published.");
+      } else {
+        Alert.alert("Link Error", "Handshake failed. Check network link.");
+      }
     } finally {
       setLinking(false);
     }
@@ -80,13 +76,12 @@ export default function NewChatScreen() {
       </View>
       <View style={styles.userInfo}>
         <Text style={styles.userName}>{item.alias}</Text>
-        <Text style={styles.userType}>GHOST AGENT // LEVEL 1</Text>
+        <Text style={styles.userType}>AGENT AUTHORIZED</Text>
       </View>
       <TouchableOpacity
-        style={[styles.chatBtn, linking && { opacity: 0.5 }]}
+        style={styles.chatBtn}
         onPress={() => startChat(item.id)}
         disabled={linking}
-        activeOpacity={0.7}
       >
         {linking ? <ActivityIndicator size="small" color="#000" /> : <MessageSquare size={18} color="#000" />}
       </TouchableOpacity>
@@ -96,7 +91,11 @@ export default function NewChatScreen() {
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
+        {/* SAFE BACK PROTOCOL */}
+        <TouchableOpacity
+          onPress={() => router.canGoBack() ? router.back() : router.replace('/home')}
+          style={styles.backBtn}
+        >
           <ChevronLeft size={24} color="#FFF" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>SECURE SEARCH</Text>
@@ -118,7 +117,7 @@ export default function NewChatScreen() {
 
       {loading && <ActivityIndicator color={COLORS.terminal_green} style={{ marginTop: 20 }} />}
 
-      <Text style={styles.sectionLabel}>IDENTIFIED AGENTS</Text>
+      <Text style={styles.sectionLabel}>NETWORK RESULTS</Text>
       <FlatList
         data={results}
         renderItem={renderUser}
@@ -126,7 +125,7 @@ export default function NewChatScreen() {
         contentContainerStyle={{ paddingBottom: 40 }}
         ListEmptyComponent={
           <Text style={styles.emptyText}>
-            {searchQuery.length < 2 ? "Enter at least 2 characters..." : "No active agents found."}
+            {searchQuery.length < 2 ? "Enter 2+ characters to scan..." : "No active agents identified."}
           </Text>
         }
       />

@@ -2,7 +2,9 @@
 import { auth, db } from "./firebase";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { doc, getDoc, setDoc, deleteDoc } from "firebase/firestore";
-import { deleteUser } from "firebase/auth";
+import { deleteUser, signOut } from "firebase/auth";
+
+const PROFILE_CACHE_KEY = 'ghostrecon_user_profile';
 
 /**
  * TOKEN MANAGEMENT
@@ -28,6 +30,7 @@ export async function getToken() {
 export async function clearToken() {
   try {
     await AsyncStorage.removeItem("ghost_recon_token");
+    await AsyncStorage.removeItem(PROFILE_CACHE_KEY);
   } catch (e) {}
 }
 
@@ -39,18 +42,19 @@ export async function destroyIdentity() {
   const user = auth.currentUser;
   if (!user) throw new Error("No active session found.");
 
+  const uid = user.uid; // ⚡ CRITICAL: Capture UID before Auth deletion
+
   try {
-    console.log("[GHOST-WIPE] Initiating document purge for UID:", user.uid);
+    console.log("[GHOST-WIPE] Initiating identity termination for UID:", uid);
 
-    // 1. Delete Firestore Profile first
-    const userDocRef = doc(db, "users", user.uid);
-    await deleteDoc(userDocRef);
-    console.log("[GHOST-WIPE] Firestore document erased.");
-
-    // 2. Delete Firebase Auth User
-    // NOTE: This may fail if the user hasn't logged in recently (Security feature)
+    // 1. Delete Firebase Auth User FIRST
     await deleteUser(user);
     console.log("[GHOST-WIPE] Auth identity terminated.");
+
+    // 2. Delete Firestore Profile (This releases the alias for others)
+    const userDocRef = doc(db, "users", uid);
+    await deleteDoc(userDocRef);
+    console.log("[GHOST-WIPE] Firestore document erased. Alias released.");
 
     // 3. Clear local storage
     await clearToken();
@@ -60,10 +64,12 @@ export async function destroyIdentity() {
     console.error("[GHOST-WIPE] Purge failed:", e);
 
     if (e.code === 'auth/requires-recent-login') {
-      throw new Error("SENSITIVE ACTION: Please sign out and sign back in before deleting your account.");
+      await signOut(auth);
+      await clearToken();
+      throw new Error("SENSITIVE ACTION: Security token expired. Sign out and sign back in to authorize destruction.");
     }
 
-    throw e;
+    throw new Error(`Protocol Error: ${e.message}`);
   }
 }
 

@@ -1,152 +1,90 @@
 import { Stack, useRouter, useSegments } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import { StyleSheet, Alert, Platform, AppState, AppStateStatus } from 'react-native';
+import { StyleSheet, Alert, Platform, AppState, AppStateStatus, View, Text } from 'react-native';
 import { useEffect, useRef, useState } from 'react';
 import { registerForPushNotifications } from '../src/notifications';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { auth, db } from '../src/firebase';
 import { collection, query, where, onSnapshot } from 'firebase/firestore';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { Shield } from 'lucide-react-native';
+
+const APP_VERSION = '2.1.1';
+const VERSION_KEY = 'ghostrecon_system_version';
 
 export default function RootLayout() {
   const router = useRouter();
   const segments = useSegments();
-  const ringtoneSound = useRef<any>(null);
-  const appState = useRef(AppState.currentState);
-  const [isLocked, setIsLocked] = useState(false);
+  const [isAppActive, setIsAppActive] = useState(true);
+  const [mustLock, setMustLock] = useState(false);
+  const [isReady, setIsReady] = useState(false);
 
-  async function playRingtone() {
-    if (Platform.OS === 'web') return;
-    try {
-      const { Audio } = require('expo-av');
-      await stopRingtone();
-      const { sound } = await Audio.Sound.createAsync(
-        { uri: 'https://cdn.pixabay.com/download/audio/2022/03/15/audio_78396636aa.mp3' },
-        { isLooping: true, shouldPlay: true, volume: 1.0 }
-      );
-      ringtoneSound.current = sound;
-      await sound.playAsync();
-    } catch (error) {
-      console.warn('Handshake alert failed', error);
-    }
-  }
-
-  async function stopRingtone() {
-    if (ringtoneSound.current) {
-      try {
-        await ringtoneSound.current.stopAsync();
-        await ringtoneSound.current.unloadAsync();
-      } catch (e) {}
-      ringtoneSound.current = null;
-    }
-  }
-
-  // Handle Privacy & Security Logic
   useEffect(() => {
+    const performSystemCheck = async () => {
+      try {
+        const lastVersion = await AsyncStorage.getItem(VERSION_KEY);
+        if (lastVersion !== APP_VERSION) {
+          const keysToPurge = ['ghostrecon_user_profile', 'ghostrecon_privacy_settings', 'ghostrecon_last_sync'];
+          await AsyncStorage.multiRemove(keysToPurge);
+          await AsyncStorage.setItem(VERSION_KEY, APP_VERSION);
+        }
+      } catch (e) {} finally { setIsReady(true); }
+    };
+    performSystemCheck();
+  }, []);
+
+  useEffect(() => {
+    if (!isReady) return;
     const handleAppStateChange = async (nextAppState: AppStateStatus) => {
       const savedSettings = await AsyncStorage.getItem('ghostrecon_privacy_settings');
       const settings = savedSettings ? JSON.parse(savedSettings) : {};
 
-      // 1. AUTO-LOCK Logic
-      if (
-        appState.current.match(/active/) &&
-        (nextAppState === 'inactive' || nextAppState === 'background')
-      ) {
-        if (settings.app_lock_immediate) {
-          setIsLocked(true);
+      if (nextAppState === 'active') {
+        setIsAppActive(true);
+      } else if (settings.screenshot_protection) {
+        setIsAppActive(false);
+      }
+
+      if (nextAppState === 'background' || nextAppState === 'inactive') {
+        if (settings.app_lock_immediate) setMustLock(true);
+      }
+
+      if (nextAppState === 'active' && mustLock) {
+        const inAuthGroup = segments[0] === 'biometric-lock' || segments[0] === 'login' || segments[0] === 'register-pseudonym';
+        if (auth.currentUser && !inAuthGroup) {
+          setMustLock(false);
+          router.replace('/biometric-lock');
+        } else {
+          setMustLock(false);
         }
       }
-
-      if (appState.current.match(/inactive|background/) && nextAppState === 'active') {
-        const bioEnabled = await AsyncStorage.getItem('ghostrecon_biometric_enabled');
-        if (isLocked || bioEnabled === 'true') {
-          const inAuthGroup = segments[0] === '(auth)' || segments[0] === 'biometric-lock' || segments[0] === 'login' || segments[0] === 'register-pseudonym';
-          if (!inAuthGroup && auth.currentUser) {
-            router.replace('/biometric-lock');
-          }
-        }
-      }
-
-      // 2. SCREEN MASKING Logic (Dynamic load to prevent crash)
-      if (Platform.OS !== 'web') {
-        try {
-          const ScreenCapture = require('expo-screen-capture');
-          if (settings.screenshot_protection) {
-            await ScreenCapture.preventScreenCaptureAsync();
-          } else {
-            await ScreenCapture.allowScreenCaptureAsync();
-          }
-        } catch (e) {}
-      }
-
-      appState.current = nextAppState;
     };
-
     const subscription = AppState.addEventListener('change', handleAppStateChange);
-
-    const syncPrivacy = async () => {
-      if (Platform.OS === 'web') return;
-      try {
-        const savedSettings = await AsyncStorage.getItem('ghostrecon_privacy_settings');
-        const settings = savedSettings ? JSON.parse(savedSettings) : {};
-        if (settings.screenshot_protection) {
-          const ScreenCapture = require('expo-screen-capture');
-          await ScreenCapture.preventScreenCaptureAsync();
-        }
-      } catch (e) {}
-    };
-    syncPrivacy();
-
-    return () => {
-      subscription.remove();
-    };
-  }, [isLocked, segments]);
+    return () => subscription.remove();
+  }, [mustLock, segments, isReady]);
 
   useEffect(() => {
-    if (Platform.OS !== 'web') {
-      registerForPushNotifications();
-    }
-
+    if (!isReady) return;
+    if (Platform.OS !== 'web') registerForPushNotifications();
     let unsubscribeCalls: () => void;
 
     const setupCallListener = () => {
       const user = auth.currentUser;
       if (!user) return;
-
-      const q = query(
-        collection(db, "calls"),
-        where("targetUserId", "==", user.uid),
-        where("status", "==", "dialing")
-      );
-
+      const q = query(collection(db, "calls"), where("targetUserId", "==", user.uid), where("status", "==", "dialing"));
       unsubscribeCalls = onSnapshot(q, (snapshot) => {
         snapshot.docChanges().forEach((change) => {
           if (change.type === "added") {
             const callData = change.doc.data();
-            const callId = change.doc.id;
-
             if (Platform.OS === 'web') {
-              const accept = window.confirm(`INCOMING SECURE LINK: Agent requesting ${callData.isVideo ? 'VIDEO' : 'VOICE'} connection. ACCEPT?`);
-              if (accept) {
-                router.push(`/call/${callData.isVideo ? 'video' : 'voice'}?id=${callId}&target=${callData.callerId}`);
+              if (window.confirm(`INCOMING CALL: ACCEPT?`)) {
+                router.push(`/call/${callData.isVideo ? 'video' : 'voice'}?id=${change.doc.id}&target=${callData.callerId}`);
               }
             } else {
-              playRingtone();
-              Alert.alert(
-                "INCOMING SECURE LINK",
-                `Agent is requesting a ${callData.isVideo ? 'VIDEO' : 'VOICE'} connection.`,
-                [
-                  { text: "REJECT", style: "cancel", onPress: () => stopRingtone() },
-                  {
-                    text: "ACCEPT",
-                    onPress: () => {
-                      stopRingtone();
-                      router.push(`/call/${callData.isVideo ? 'video' : 'voice'}?id=${callId}&target=${callData.callerId}`);
-                    }
-                  }
-                ],
-                { onDismiss: () => stopRingtone() }
-              );
+              Alert.alert("INCOMING CALL", "Secure link requested", [
+                { text: "ACCEPT", onPress: () => router.push(`/call/${callData.isVideo ? 'video' : 'voice'}?id=${change.doc.id}&target=${callData.callerId}`) },
+                { text: "REJECT", style: "cancel" }
+              ]);
             }
           }
         });
@@ -154,37 +92,32 @@ export default function RootLayout() {
     };
 
     const authUnsubscribe = auth.onAuthStateChanged((user) => {
-      if (user) {
-        setupCallListener();
-      } else if (unsubscribeCalls) {
-        unsubscribeCalls();
-      }
+      if (user) setupCallListener();
+      else if (unsubscribeCalls) unsubscribeCalls();
     });
+    return () => { authUnsubscribe(); if (unsubscribeCalls) unsubscribeCalls(); };
+  }, [isReady]);
 
-    return () => {
-      authUnsubscribe();
-      if (unsubscribeCalls) unsubscribeCalls();
-      stopRingtone();
-    };
-  }, []);
+  if (!isReady) return null;
 
   return (
     <SafeAreaProvider style={styles.container}>
       <StatusBar style="light" />
-      <Stack
-        screenOptions={{
-          headerShown: false,
-          contentStyle: { backgroundColor: '#050505' },
-          animation: 'fade',
-        }}
-      />
+      <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: '#050505' }, animation: 'fade' }} />
+      {!isAppActive && (
+        <View style={styles.privacyOverlay}>
+          <Shield size={64} color="#00FF41" />
+          <Text style={styles.privacyText}>GHOSTRECON SECURE NODE</Text>
+          <Text style={styles.privacySubtext}>HANDSHAKE ENCRYPTED // CONTENT MASKED</Text>
+        </View>
+      )}
     </SafeAreaProvider>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#050505',
-  },
+  container: { flex: 1, backgroundColor: '#050505' },
+  privacyOverlay: { ...StyleSheet.absoluteFillObject, backgroundColor: '#050505', zIndex: 9999, alignItems: 'center', justifyContent: 'center', gap: 20 },
+  privacyText: { color: '#00FF41', fontSize: 14, fontWeight: '900', fontFamily: 'monospace', letterSpacing: 4 },
+  privacySubtext: { color: '#525252', fontSize: 8, fontFamily: 'monospace' }
 });

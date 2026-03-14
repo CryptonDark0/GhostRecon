@@ -1,24 +1,16 @@
 import React, { useEffect, useState, useRef, useCallback } from "react";
 import {
-  View,
-  Text,
-  StyleSheet,
-  TouchableOpacity,
-  ActivityIndicator,
-  Alert,
-  SafeAreaView,
-  SectionList,
-  AppState,
-  Platform
+  View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, Alert, SafeAreaView, SectionList, Platform
 } from "react-native";
 import { useRouter } from "expo-router";
 import { COLORS } from "../src/constants";
 import { clearToken, destroyIdentity } from "../src/api";
 import { auth, db } from "../src/firebase";
 import { doc, onSnapshot, updateDoc, serverTimestamp, collection, query, where, orderBy, deleteDoc } from "firebase/firestore";
-import { Shield, MessageSquare, Settings, Power, Lock, Users, ChevronRight, Crown } from "lucide-react-native";
+import { Shield, MessageSquare, Power, Lock, Users, ChevronRight, Crown, LogOut } from "lucide-react-native";
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
-// --- OPTIMIZED COMPONENTS ---
+const PROFILE_CACHE_KEY = 'ghostrecon_user_profile';
 
 const ChatItem = React.memo(({ item, onPress, onDelete }: any) => (
   <View style={styles.convWrapper}>
@@ -32,11 +24,7 @@ const ChatItem = React.memo(({ item, onPress, onDelete }: any) => (
       </View>
       <ChevronRight size={16} color={COLORS.stealth_grey} />
     </TouchableOpacity>
-    <TouchableOpacity
-      style={styles.deleteBtn}
-      onPress={() => onDelete(item.id)}
-      hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-    >
+    <TouchableOpacity style={styles.deleteBtn} onPress={() => onDelete(item.id)} hitSlop={10}>
       <Power size={16} color={COLORS.critical_red} />
     </TouchableOpacity>
   </View>
@@ -55,16 +43,34 @@ export default function HomeScreen() {
     let unsubscribeProfile: () => void;
     let unsubscribeConvs: () => void;
 
+    // ⚡ INSTANT IDENTITY LOCK
+    const initSession = async () => {
+      try {
+        const cached = await AsyncStorage.getItem(PROFILE_CACHE_KEY);
+        if (cached) {
+          const parsed = JSON.parse(cached);
+          setUserProfile(parsed);
+          setLoading(false);
+        }
+      } catch (e) {}
+    };
+    initSession();
+
     const unsubscribeAuth = auth.onAuthStateChanged((user) => {
       if (user) {
         updateDoc(doc(db, "users", user.uid), { isOnline: true, lastSeen: serverTimestamp() }).catch(() => {});
 
         unsubscribeProfile = onSnapshot(doc(db, "users", user.uid), (docSnap) => {
           if (docSnap.exists()) {
-            setUserProfile(docSnap.data());
+            const data = docSnap.data();
+            setUserProfile(data);
+            AsyncStorage.setItem(PROFILE_CACHE_KEY, JSON.stringify(data));
           }
           setLoading(false);
-        }, () => setLoading(false));
+        }, (err) => {
+          console.error("Profile handshake failed:", err);
+          setLoading(false);
+        });
 
         const q = query(
           collection(db, "conversations"),
@@ -75,14 +81,13 @@ export default function HomeScreen() {
         unsubscribeConvs = onSnapshot(q, (snapshot) => {
           const all = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
           setSections([
-            { title: "CHATS", data: all.filter(c => !c.isGroup) },
-            { title: "GROUPS", data: all.filter(c => c.isGroup) }
+            { title: "CHATS", data: all.filter((c: any) => !c.isGroup) },
+            { title: "GROUPS", data: all.filter((c: any) => c.isGroup) }
           ]);
-          setLoading(false);
-        }, () => setLoading(false));
+        });
 
       } else {
-        setLoading(false);
+        AsyncStorage.removeItem(PROFILE_CACHE_KEY);
         router.replace("/");
       }
     });
@@ -94,36 +99,13 @@ export default function HomeScreen() {
     };
   }, []);
 
-  const handleOpenChat = useCallback((id: string) => router.push(`/chat/${id}`), []);
-
-  const handleDeleteChat = useCallback(async (id: string) => {
-    const performWipe = async () => {
-      try { await deleteDoc(doc(db, "conversations", id)); } catch (e) {}
-    };
-
-    if (Platform.OS === 'web') {
-      if (window.confirm("PERMANENTLY WIPE CHANNEL?")) performWipe();
-    } else {
-      Alert.alert("CONFIRM WIPE", "Destroy this secure channel?", [
-        { text: "CANCEL", style: "cancel" },
-        { text: "WIPE", style: "destructive", onPress: performWipe }
-      ]);
-    }
-  }, []);
-
-  const handleOpenVault = () => {
-    if (userProfile?.isSubscribed) {
-      router.push('/vault');
-    } else {
-      router.push('/subscription');
-    }
-  };
+  const handleOpenVault = () => userProfile?.isSubscribed ? router.push('/vault') : router.push('/subscription');
 
   if (loading && !userProfile) {
     return (
       <View style={styles.loadingContainer}>
         <ActivityIndicator color={COLORS.terminal_green} size="large" />
-        <Text style={styles.loadingText}>SYNCHRONIZING SECURE LINK...</Text>
+        <Text style={styles.loadingText}>SYNCHRONIZING SECURE IDENTITY...</Text>
       </View>
     );
   }
@@ -134,7 +116,7 @@ export default function HomeScreen() {
         <View>
           <Text style={styles.headerLabel}>OPERATOR</Text>
           <View style={styles.nameRow}>
-            <Text style={styles.codename}>{userProfile?.alias?.toUpperCase() || "HANDSHAKE..."}</Text>
+            <Text style={styles.codename}>{userProfile?.alias?.toUpperCase() || "AGENT_PENDING"}</Text>
             {userProfile?.isSubscribed && <Crown size={14} color={COLORS.alert_amber} style={{ marginLeft: 4 }} />}
             <View style={[styles.statusDot, { backgroundColor: COLORS.terminal_green }]} />
           </View>
@@ -148,22 +130,25 @@ export default function HomeScreen() {
         sections={sections}
         keyExtractor={(item) => item.id}
         renderItem={({ item }) => (
-          <ChatItem item={item} onPress={handleOpenChat} onDelete={handleDeleteChat} />
+          <ChatItem item={item} onPress={(id: string) => router.replace(`/chat/${id}`)} onDelete={async (id: string) => {
+            if (Platform.OS === 'web') {
+              if (window.confirm("WIPE CHANNEL?")) await deleteDoc(doc(db, "conversations", id));
+            } else {
+              Alert.alert("WIPE", "Destroy channel?", [{text:"CANCEL"}, {text:"WIPE", onPress:()=>deleteDoc(doc(db,"conversations",id))}]);
+            }
+          }} />
         )}
         renderSectionHeader={({ section: { title, data } }) => (
           data.length > 0 ? <Text style={styles.sectionTitle}>{title}</Text> : null
         )}
         contentContainerStyle={styles.content}
-        stickySectionHeadersEnabled={false}
-        removeClippedSubviews={true}
-        initialNumToRender={10}
         ListHeaderComponent={
           <View style={styles.actionGrid}>
-            <TouchableOpacity style={styles.gridItem} onPress={() => router.push('/new-chat')}>
+            <TouchableOpacity style={styles.gridItem} onPress={() => router.replace('/new-chat')}>
               <MessageSquare size={24} color={COLORS.terminal_green} />
               <Text style={styles.gridLabel}>CHAT</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={styles.gridItem} onPress={() => router.push('/new-group')}>
+            <TouchableOpacity style={styles.gridItem} onPress={() => router.replace('/new-group')}>
               <Users size={24} color={COLORS.terminal_green} />
               <Text style={styles.gridLabel}>GROUP</Text>
             </TouchableOpacity>
@@ -178,21 +163,11 @@ export default function HomeScreen() {
           <View style={styles.footer}>
             <TouchableOpacity style={styles.logoutBtn} onPress={async () => {
               await auth.signOut();
-              await clearToken();
+              await AsyncStorage.removeItem(PROFILE_CACHE_KEY);
               router.replace("/");
             }}>
-              <Power size={14} color={COLORS.muted_text} />
-              <Text style={styles.logoutText}>TERMINATE SESSION</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity style={styles.purgeBtn} onPress={async () => {
-              if (window.confirm?.("PERMANENTLY DELETE ACCOUNT?")) {
-                await destroyIdentity();
-                router.replace("/");
-              }
-            }}>
-              <Power size={14} color={COLORS.critical_red} />
-              <Text style={styles.purgeText}>ACCOUNT DELETION</Text>
+              <LogOut size={14} color={COLORS.muted_text} />
+              <Text style={styles.logoutText}>LOGOUT</Text>
             </TouchableOpacity>
           </View>
         }
@@ -226,6 +201,4 @@ const styles = StyleSheet.create({
   footer: { marginTop: 40, gap: 12, paddingBottom: 40 },
   logoutBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10, paddingVertical: 12, opacity: 0.6 },
   logoutText: { color: COLORS.ghost_white, fontSize: 10, fontWeight: "700", fontFamily: "monospace" },
-  purgeBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10, paddingVertical: 16, borderTopWidth: 1, borderTopColor: COLORS.armour_grey },
-  purgeText: { color: COLORS.critical_red, fontSize: 10, fontWeight: "900", fontFamily: "monospace" },
 });
