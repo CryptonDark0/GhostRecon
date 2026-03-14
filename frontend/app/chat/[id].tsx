@@ -8,7 +8,7 @@ import { ChevronLeft, Send, Lock, Phone, Video, ImageIcon, Paperclip, Clock, Tra
 import { COLORS } from '../../src/constants';
 import { auth, db } from '../../src/firebase';
 import { doc, getDoc, onSnapshot, collection, query, orderBy, addDoc, serverTimestamp, updateDoc, deleteDoc } from 'firebase/firestore';
-import { uploadMedia, setTypingStatus, listenTypingStatus, markAsRead, deleteMessageForEveryone, deleteMessageForMe, addReaction } from '../../src/firestoreService';
+import { uploadMedia, setTypingStatus, listenTypingStatus, markAsRead, deleteMessageForEveryone, deleteMessageForMe, addReaction, sendMessage } from '../../src/firestoreService';
 import * as ImagePicker from 'expo-image-picker';
 import * as DocumentPicker from 'expo-document-picker';
 
@@ -90,29 +90,25 @@ export default function ChatDetail() {
     return () => timeouts.forEach(t => clearTimeout(t));
   }, [messages]);
 
-  const handleSendMessage = async (type: string = 'text', mediaUrl: string | null = null, fileSize: number = 0, filePath: string | null = null) => {
-    if ((!input.trim() && !mediaUrl) || !currentUser || !id) return;
-    const text = input.trim();
-    if (type === 'text') setInput('');
-    setTypingStatus(id, currentUser.uid, false);
+  const handleSend = async (type: string = 'text', mediaData: any = null) => {
+    if ((!input.trim() && !mediaData) || !currentUser || !id) return;
 
     try {
       const userDoc = await getDoc(doc(db, "users", currentUser.uid));
-      const senderAlias = userDoc.exists() ? userDoc.data().alias : 'Ghost';
+      const alias = userDoc.exists() ? userDoc.data().alias : 'Ghost';
 
-      await addDoc(collection(db, "conversations", id, "messages"), {
-        conversation_id: id, sender_id: currentUser.uid, sender_alias: senderAlias,
-        content: text, type, fileUrl: mediaUrl, filePath, fileSize, created_at: serverTimestamp(),
-        self_destruct_seconds: selfDestruct,
-        hiddenFor: [],
-        reactions: {}
+      await sendMessage(id, currentUser.uid, alias, input.trim(), {
+        type,
+        fileUrl: mediaData?.url || null,
+        filePath: mediaData?.path || null,
+        fileSize: mediaData?.size || 0,
+        self_destruct_seconds: selfDestruct
       });
 
-      await updateDoc(doc(db, "conversations", id), {
-        lastMessageAt: serverTimestamp(),
-        lastMessage: type === 'text' ? text : `[Tactical ${type}]`
-      });
-    } catch (err) { Alert.alert("Link Failed", "Handshake failed."); }
+      if (type === 'text') setInput('');
+    } catch (err) {
+      Alert.alert("Link Failed", "Handshake interrupted.");
+    }
   };
 
   const pickMedia = async (mode: 'image' | 'file') => {
@@ -120,10 +116,7 @@ export default function ChatDetail() {
     try {
       let result;
       if (mode === 'image') {
-        result = await ImagePicker.launchImageLibraryAsync({
-          mediaTypes: ImagePicker.MediaTypeOptions.Images,
-          quality: 0.8 // 🛡️ Optimized High Fidelity (Great balance)
-        });
+        result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ImagePicker.MediaTypeOptions.Images, quality: 0.8 });
       } else {
         result = await DocumentPicker.getDocumentAsync({ type: '*/*' });
       }
@@ -131,13 +124,22 @@ export default function ChatDetail() {
       if (!result.canceled && result.assets[0]) {
         setSendingMedia(true);
         const media = await uploadMedia(currentUser.uid, result.assets[0].uri, mode, setUploadProgress);
-        await handleSendMessage(mode, media.url, media.size, media.path);
+        await handleSend(mode, media);
       }
-    } catch (e: any) { Alert.alert("Handshake Error", "Media dispatch failed."); }
+    } catch (e: any) { Alert.alert("Error", "Media dispatch failed."); }
     finally { setSendingMedia(false); setUploadProgress(0); }
   };
 
-  const handleAction = async (action: 'everyone' | 'me' | 'react', emoji?: string) => {
+  const handleCall = async (type: 'voice' | 'video') => {
+    if (!targetAgent || !id) return;
+
+    // Log call start in chat history
+    await handleSend('text', { content: `[${type.toUpperCase()} CALL STARTED]` });
+
+    router.push(`/call/${type}?target=${targetAgent.uid}`);
+  };
+
+  const onMsgAction = async (action: 'everyone' | 'me' | 'react', emoji?: string) => {
     if (!selectedMsg || !id || !currentUser) return;
     setMenuVisible(false);
     try {
@@ -153,9 +155,7 @@ export default function ChatDetail() {
 
   const openNode = (url: string) => {
     if (!url) return;
-    Linking.openURL(url).catch(() => {
-      Alert.alert("Handshake Error", "Could not open secure link.");
-    });
+    Linking.openURL(url).catch(() => Alert.alert("Error", "Could not open link."));
   };
 
   const renderMessage = ({ item }: { item: any }) => {
@@ -199,16 +199,16 @@ export default function ChatDetail() {
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.replace('/home')}><ChevronLeft size={24} color="#FFF" /></TouchableOpacity>
+        <TouchableOpacity onPress={() => router.replace('/home')} style={styles.headerBtn}><ChevronLeft size={24} color="#FFF" /></TouchableOpacity>
         <View style={styles.headerCenter}>
-          <Text style={styles.headerTitle}>{targetAgent?.alias?.toUpperCase()}</Text>
+          <Text style={styles.headerTitle}>{targetAgent?.alias?.toUpperCase() || "AGENT"}</Text>
           <Text style={[styles.headerStatus, { color: targetAgent?.isOnline ? COLORS.terminal_green : COLORS.muted_text }]}>
             {typingAgents.length > 0 ? "AGENT COMPOSING..." : (targetAgent?.isOnline ? "SECURE LINK ACTIVE" : "OFFLINE")}
           </Text>
         </View>
         <View style={styles.headerActions}>
-          <TouchableOpacity style={styles.headerIconBtn} onPress={() => router.push(`/call/voice?target=${targetAgent?.uid}`)}><Phone size={18} color={COLORS.terminal_green} /></TouchableOpacity>
-          <TouchableOpacity style={styles.headerIconBtn} onPress={() => router.push(`/call/video?target=${targetAgent?.uid}`)}><Video size={18} color={COLORS.terminal_green} /></TouchableOpacity>
+          <TouchableOpacity style={styles.headerIconBtn} onPress={() => handleCall('voice')}><Phone size={18} color={COLORS.terminal_green} /></TouchableOpacity>
+          <TouchableOpacity style={styles.headerIconBtn} onPress={() => handleCall('video')}><Video size={18} color={COLORS.terminal_green} /></TouchableOpacity>
         </View>
       </View>
 
@@ -239,7 +239,7 @@ export default function ChatDetail() {
             onChangeText={(t) => { setInput(t); setTypingStatus(id!, currentUser!.uid, t.length > 0); }}
             placeholder="Type tactical intel..." placeholderTextColor="#444" multiline
           />
-          <TouchableOpacity onPress={() => handleSendMessage()} style={styles.sendBtn}><Send size={20} color="#000" /></TouchableOpacity>
+          <TouchableOpacity onPress={() => handleSend()} style={styles.sendBtn}><Send size={20} color="#000" /></TouchableOpacity>
         </View>
       </KeyboardAvoidingView>
 
@@ -248,12 +248,12 @@ export default function ChatDetail() {
           <View style={styles.menuContent}>
             <View style={styles.reactionRow}>
               {['👍', '❤️', '😮', '😂', '🔥', '🎯'].map(emoji => (
-                <TouchableOpacity key={emoji} onPress={() => handleAction('react', emoji)} style={styles.emojiBtn}><Text style={{fontSize: 24}}>{emoji}</Text></TouchableOpacity>
+                <TouchableOpacity key={emoji} onPress={() => onMsgAction('react', emoji)} style={styles.emojiBtn}><Text style={{fontSize: 24}}>{emoji}</Text></TouchableOpacity>
               ))}
             </View>
-            <TouchableOpacity style={styles.menuItem} onPress={() => handleAction('me')}><Trash2 size={18} color="#FFF" /><Text style={styles.menuText}>DELETE FOR ME</Text></TouchableOpacity>
+            <TouchableOpacity style={styles.menuItem} onPress={() => onMsgAction('me')}><Trash2 size={18} color="#FFF" /><Text style={styles.menuText}>DELETE FOR ME</Text></TouchableOpacity>
             {selectedMsg?.sender_id === currentUser?.uid && (
-              <TouchableOpacity style={[styles.menuItem, {borderTopWidth: 1, borderTopColor: '#222'}]} onPress={() => handleAction('everyone')}><ShieldAlert size={18} color={COLORS.critical_red} /><Text style={[styles.menuText, {color: COLORS.critical_red}]}>DELETE FOR EVERYONE</Text></TouchableOpacity>
+              <TouchableOpacity style={[styles.menuItem, {borderTopWidth: 1, borderTopColor: '#222'}]} onPress={() => onMsgAction('everyone')}><ShieldAlert size={18} color={COLORS.critical_red} /><Text style={[styles.menuText, {color: COLORS.critical_red}]}>DELETE FOR EVERYONE</Text></TouchableOpacity>
             )}
           </View>
         </TouchableOpacity>

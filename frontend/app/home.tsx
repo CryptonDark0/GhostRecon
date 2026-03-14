@@ -7,28 +7,48 @@ import { COLORS } from "../src/constants";
 import { clearToken, destroyIdentity } from "../src/api";
 import { auth, db } from "../src/firebase";
 import { doc, onSnapshot, updateDoc, serverTimestamp, collection, query, where, orderBy, deleteDoc, getDoc } from "firebase/firestore";
-import { Shield, MessageSquare, Power, Users, ChevronRight, LogOut } from "lucide-react-native";
+import { Shield, MessageSquare, Power, Users, ChevronRight, LogOut, Circle } from "lucide-react-native";
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const PROFILE_CACHE_KEY = 'ghostrecon_user_profile';
 
-const ChatItem = React.memo(({ item, onPress, onDelete }: any) => (
-  <View style={styles.convWrapper}>
-    <TouchableOpacity style={styles.convItem} onPress={() => onPress(item.id)} activeOpacity={0.7}>
-      <View style={styles.convIcon}>
-        {item.isGroup ? <Users size={20} color={COLORS.terminal_green} /> : <MessageSquare size={20} color={COLORS.terminal_green} />}
-      </View>
-      <View style={styles.convInfo}>
-        <Text style={styles.convTitle}>{item.name || `CHANNEL: ${item.id.substring(0, 8)}`}</Text>
-        <Text style={styles.lastMsg} numberOfLines={1}>{item.lastMessage || "Encrypted link active."}</Text>
-      </View>
-      <ChevronRight size={16} color={COLORS.stealth_grey} />
-    </TouchableOpacity>
-    <TouchableOpacity style={styles.deleteBtn} onPress={() => onDelete(item.id)} hitSlop={10}>
-      <Power size={16} color={COLORS.critical_red} />
-    </TouchableOpacity>
-  </View>
-));
+const ChatItem = React.memo(({ item, onPress, onDelete }: any) => {
+  const [targetStatus, setTargetStatus] = useState<any>(null);
+  const currentUser = auth.currentUser;
+
+  useEffect(() => {
+    if (!item.participants || !currentUser) return;
+    const targetId = item.participants.find((p: string) => p !== currentUser.uid);
+    if (!targetId) return;
+
+    return onSnapshot(doc(db, "users", targetId), (snap) => {
+      if (snap.exists()) {
+        setTargetStatus(snap.data());
+      }
+    });
+  }, [item.participants]);
+
+  return (
+    <View style={styles.convWrapper}>
+      <TouchableOpacity style={styles.convItem} onPress={() => onPress(item.id)} activeOpacity={0.7}>
+        <View style={styles.convIcon}>
+          {item.isGroup ? <Users size={20} color={COLORS.terminal_green} /> : <MessageSquare size={20} color={COLORS.terminal_green} />}
+          {!item.isGroup && (
+            <View style={[styles.statusDotSmall, { backgroundColor: targetStatus?.isOnline ? COLORS.terminal_green : COLORS.critical_red }]} />
+          )}
+        </View>
+        <View style={styles.convInfo}>
+          <Text style={styles.convTitle}>{item.name || `CHANNEL: ${item.id.substring(0, 8)}`}</Text>
+          <Text style={styles.lastMsg} numberOfLines={1}>{item.lastMessage || "Encrypted link active."}</Text>
+        </View>
+        <ChevronRight size={16} color={COLORS.stealth_grey} />
+      </TouchableOpacity>
+      <TouchableOpacity style={styles.deleteBtn} onPress={() => onDelete(item.id)} hitSlop={10}>
+        <Power size={16} color={COLORS.critical_red} />
+      </TouchableOpacity>
+    </View>
+  );
+});
 
 export default function HomeScreen() {
   const router = useRouter();
@@ -43,22 +63,21 @@ export default function HomeScreen() {
     let unsubscribeProfile: () => void;
     let unsubscribeConvs: () => void;
 
-    // ⚡ INSTANT CACHE LOAD: Prevents "AGENT_PENDING"
-    const loadCachedIdentity = async () => {
-      const cached = await AsyncStorage.getItem(PROFILE_CACHE_KEY);
-      if (cached) {
-        const parsed = JSON.parse(cached);
-        setUserProfile(parsed);
-        setLoading(false);
-      }
+    const initSession = async () => {
+      try {
+        const cached = await AsyncStorage.getItem(PROFILE_CACHE_KEY);
+        if (cached) {
+          setUserProfile(JSON.parse(cached));
+          setLoading(false);
+        }
+      } catch (e) {}
     };
-    loadCachedIdentity();
+    initSession();
 
     const unsubscribeAuth = auth.onAuthStateChanged((user) => {
       if (user) {
         updateDoc(doc(db, "users", user.uid), { isOnline: true, lastSeen: serverTimestamp() }).catch(() => {});
 
-        // 🛡️ DEEP SYNC: Link Firestore to Cache
         unsubscribeProfile = onSnapshot(doc(db, "users", user.uid), (docSnap) => {
           if (docSnap.exists()) {
             const data = docSnap.data();
@@ -68,7 +87,6 @@ export default function HomeScreen() {
           setLoading(false);
         });
 
-        // Conversations Sync
         const q = query(
           collection(db, "conversations"),
           where("participants", "array-contains", user.uid),
@@ -81,8 +99,6 @@ export default function HomeScreen() {
             { title: "CHATS", data: all.filter((c: any) => !c.isGroup) },
             { title: "GROUPS", data: all.filter((c: any) => c.isGroup) }
           ]);
-        }, (err) => {
-          console.log("[GHOST-SYNC] Handshake closed.");
         });
 
       } else {
@@ -114,7 +130,7 @@ export default function HomeScreen() {
           <Text style={styles.headerLabel}>OPERATOR</Text>
           <View style={styles.nameRow}>
             <Text style={styles.codename}>{userProfile?.alias?.toUpperCase() || "RE-SYNCING..."}</Text>
-            <View style={[styles.statusDot, { backgroundColor: COLORS.terminal_green }]} />
+            <View style={[styles.statusDot, { backgroundColor: userProfile?.isOnline ? COLORS.terminal_green : COLORS.critical_red }]} />
           </View>
         </View>
         <TouchableOpacity style={styles.profileBtn} onPress={() => router.push('/settings')}>
@@ -176,6 +192,7 @@ const styles = StyleSheet.create({
   nameRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 4 },
   codename: { color: COLORS.ghost_white, fontSize: 18, fontWeight: "900", fontFamily: "monospace", letterSpacing: 1 },
   statusDot: { width: 8, height: 8, borderRadius: 4, marginLeft: 4 },
+  statusDotSmall: { position: 'absolute', bottom: 0, right: 0, width: 10, height: 10, borderRadius: 5, borderWidth: 2, borderColor: COLORS.gunmetal },
   profileBtn: { width: 44, height: 44, borderRadius: 22, borderWidth: 1, borderColor: COLORS.terminal_green, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(0,255,65,0.05)' },
   content: { padding: 24 },
   actionGrid: { flexDirection: 'row', gap: 16, marginBottom: 32 },
@@ -184,7 +201,7 @@ const styles = StyleSheet.create({
   sectionTitle: { color: COLORS.terminal_green, fontSize: 10, fontWeight: '700', fontFamily: "monospace", letterSpacing: 2, marginBottom: 16, marginTop: 12 },
   convWrapper: { flexDirection: 'row', alignItems: 'center', marginBottom: 12 },
   convItem: { flex: 1, flexDirection: 'row', alignItems: 'center', padding: 16, backgroundColor: COLORS.gunmetal, borderRadius: 4, borderWidth: 1, borderColor: COLORS.border_subtle },
-  convIcon: { width: 40, height: 40, borderRadius: 20, backgroundColor: 'rgba(0,255,65,0.05)', alignItems: 'center', justifyContent: 'center', marginRight: 16 },
+  convIcon: { width: 40, height: 40, borderRadius: 20, backgroundColor: 'rgba(0,255,65,0.05)', alignItems: 'center', justifyContent: 'center', marginRight: 16, position: 'relative' },
   convInfo: { flex: 1 },
   convTitle: { color: COLORS.ghost_white, fontSize: 13, fontWeight: '700', fontFamily: 'monospace' },
   lastMsg: { color: COLORS.stealth_grey, fontSize: 11, fontFamily: 'monospace', marginTop: 4 },

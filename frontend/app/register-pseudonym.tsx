@@ -23,6 +23,7 @@ export default function RegisterPseudonym() {
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
 
+  // ENSURE CLEAN STATE
   useEffect(() => {
     const forceCleanup = async () => {
       await signOut(auth).catch(() => {});
@@ -56,6 +57,10 @@ export default function RegisterPseudonym() {
   const handleRegister = async () => {
     Keyboard.dismiss();
 
+    if (Platform.OS === 'web' && typeof document !== 'undefined') {
+      if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
+    }
+
     const trimmedAlias = alias.trim();
     const trimmedEmail = email.trim().toLowerCase();
 
@@ -75,29 +80,24 @@ export default function RegisterPseudonym() {
     }
 
     setLoading(true);
-    console.log("[GHOST-PROTOCOL] Initiating Identity Handshake...");
-
     try {
-      // 🛡️ STEP 1: AUTHENTICATE FIRST
-      // This establishes the session required by Firestore security rules.
+      // 1. Create Auth Identity FIRST
       const userCredential = await createUserWithEmailAndPassword(auth, trimmedEmail, password);
       const user = userCredential.user;
 
       try {
-        // 🛡️ STEP 2: CHECK ALIAS UNIQUENESS (Now permitted because we are authenticated)
+        // 2. Check Alias Uniqueness
         const usersRef = collection(db, "users");
         const q = query(usersRef, where("alias_lowercase", "==", trimmedAlias.toLowerCase()));
         const querySnapshot = await getDocs(q);
 
         if (!querySnapshot.empty) {
-          // ALIAS TAKEN: Rollback Auth account instantly
           await deleteUser(user);
           setLoading(false);
-          showAlert('Alias Taken', 'This tactical alias is already assigned to another agent.');
+          showAlert('Alias Taken', 'This tactical alias is already assigned.');
           return;
         }
 
-        // 🛡️ STEP 3: INITIALIZE SECURE NODE
         await sendEmailVerification(user);
         const keyPair = await getOrCreateKeyPair();
 
@@ -114,23 +114,19 @@ export default function RegisterPseudonym() {
           isSubscribed: false
         });
 
-        // 🛡️ STEP 4: SECURE LOGOUT
         await signOut(auth);
         await clearToken();
         setLoading(false);
-        showAlert('HANDSHAKE PENDING', 'Verification link dispatched to Gmail. You MUST verify your email before signing in.');
+        showAlert('HANDSHAKE PENDING', 'Verification link dispatched to Gmail. Please verify before signing in.');
         router.replace('/');
 
       } catch (innerErr: any) {
-        console.error("[GHOST-PROTOCOL] Rollback triggered:", innerErr);
         await deleteUser(user).catch(() => {});
         throw innerErr;
       }
     } catch (err: any) {
       setLoading(false);
-      let msg = err.message;
-      if (err.code === 'auth/email-already-in-use') msg = "This email is already linked to an active identity.";
-      showAlert('Handshake Failed', msg);
+      showAlert('Handshake Failed', err.message);
     }
   };
 
@@ -164,18 +160,51 @@ export default function RegisterPseudonym() {
           <View style={styles.form}>
             <View style={styles.inputGroup}>
               <Text style={styles.label}>TACTICAL ALIAS</Text>
-              <TextInput style={styles.input} value={alias} onChangeText={setAlias} placeholder="Agent_Shadow" placeholderTextColor="#444" autoComplete="username" autoCapitalize="none" autoCorrect={false} />
+              <TextInput
+                id="reg-alias"
+                name="username"
+                style={styles.input}
+                value={alias}
+                onChangeText={setAlias}
+                placeholder="Agent_Shadow"
+                placeholderTextColor="#444"
+                autoComplete="username"
+                autoCapitalize="none"
+                autoCorrect={false}
+              />
             </View>
 
             <View style={styles.inputGroup}>
               <Text style={styles.label}>EMAIL ADDRESS</Text>
-              <TextInput style={styles.input} value={email} onChangeText={setEmail} placeholder="agent@secure-link.com" placeholderTextColor="#444" keyboardType="email-address" autoComplete="email" autoCapitalize="none" autoCorrect={false} />
+              <TextInput
+                id="reg-email"
+                name="email"
+                style={styles.input}
+                value={email}
+                onChangeText={setEmail}
+                placeholder="agent@secure-link.com"
+                placeholderTextColor="#444"
+                keyboardType="email-address"
+                autoComplete="email"
+                autoCapitalize="none"
+                autoCorrect={false}
+              />
             </View>
 
             <View style={styles.inputGroup}>
               <Text style={styles.label}>SECURITY PASSPHRASE</Text>
               <View style={styles.passwordContainer}>
-                <TextInput style={[styles.input, { flex: 1, marginBottom: 0, borderWidth: 0 }]} value={password} onChangeText={setPassword} placeholder="Tactical Passphrase" placeholderTextColor="#444" secureTextEntry={!showPassword} autoComplete="new-password" />
+                <TextInput
+                  id="reg-password"
+                  name="new-password"
+                  style={[styles.input, { flex: 1, marginBottom: 0, borderWidth: 0 }]}
+                  value={password}
+                  onChangeText={setPassword}
+                  placeholder="Tactical Passphrase"
+                  placeholderTextColor="#444"
+                  secureTextEntry={!showPassword}
+                  autoComplete="new-password"
+                />
                 <TouchableOpacity onPress={() => setShowPassword(!showPassword)} style={styles.eyeBtn}>
                   {showPassword ? <EyeOff size={20} color={COLORS.terminal_green} /> : <Eye size={20} color={COLORS.terminal_green} />}
                 </TouchableOpacity>
