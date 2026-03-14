@@ -6,7 +6,7 @@ import { useRouter } from "expo-router";
 import { COLORS } from "../src/constants";
 import { clearToken, destroyIdentity } from "../src/api";
 import { auth, db } from "../src/firebase";
-import { doc, onSnapshot, updateDoc, serverTimestamp, collection, query, where, orderBy, deleteDoc } from "firebase/firestore";
+import { doc, onSnapshot, updateDoc, serverTimestamp, collection, query, where, orderBy, deleteDoc, getDoc } from "firebase/firestore";
 import { Shield, MessageSquare, Power, Users, ChevronRight, LogOut } from "lucide-react-native";
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
@@ -43,21 +43,22 @@ export default function HomeScreen() {
     let unsubscribeProfile: () => void;
     let unsubscribeConvs: () => void;
 
-    const initSession = async () => {
-      try {
-        const cached = await AsyncStorage.getItem(PROFILE_CACHE_KEY);
-        if (cached) {
-          setUserProfile(JSON.parse(cached));
-          setLoading(false);
-        }
-      } catch (e) {}
+    // ⚡ INSTANT CACHE LOAD: Prevents "AGENT_PENDING"
+    const loadCachedIdentity = async () => {
+      const cached = await AsyncStorage.getItem(PROFILE_CACHE_KEY);
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        setUserProfile(parsed);
+        setLoading(false);
+      }
     };
-    initSession();
+    loadCachedIdentity();
 
     const unsubscribeAuth = auth.onAuthStateChanged((user) => {
       if (user) {
         updateDoc(doc(db, "users", user.uid), { isOnline: true, lastSeen: serverTimestamp() }).catch(() => {});
 
+        // 🛡️ DEEP SYNC: Link Firestore to Cache
         unsubscribeProfile = onSnapshot(doc(db, "users", user.uid), (docSnap) => {
           if (docSnap.exists()) {
             const data = docSnap.data();
@@ -65,10 +66,9 @@ export default function HomeScreen() {
             AsyncStorage.setItem(PROFILE_CACHE_KEY, JSON.stringify(data));
           }
           setLoading(false);
-        }, (err) => {
-          setLoading(false);
         });
 
+        // Conversations Sync
         const q = query(
           collection(db, "conversations"),
           where("participants", "array-contains", user.uid),
@@ -81,6 +81,8 @@ export default function HomeScreen() {
             { title: "CHATS", data: all.filter((c: any) => !c.isGroup) },
             { title: "GROUPS", data: all.filter((c: any) => c.isGroup) }
           ]);
+        }, (err) => {
+          console.log("[GHOST-SYNC] Handshake closed.");
         });
 
       } else {
@@ -100,7 +102,7 @@ export default function HomeScreen() {
     return (
       <View style={styles.loadingContainer}>
         <ActivityIndicator color={COLORS.terminal_green} size="large" />
-        <Text style={styles.loadingText}>SYNCHRONIZING SECURE IDENTITY...</Text>
+        <Text style={styles.loadingText}>SYNCHRONIZING TACTICAL NODE...</Text>
       </View>
     );
   }
@@ -111,7 +113,7 @@ export default function HomeScreen() {
         <View>
           <Text style={styles.headerLabel}>OPERATOR</Text>
           <View style={styles.nameRow}>
-            <Text style={styles.codename}>{userProfile?.alias?.toUpperCase() || "AGENT_PENDING"}</Text>
+            <Text style={styles.codename}>{userProfile?.alias?.toUpperCase() || "RE-SYNCING..."}</Text>
             <View style={[styles.statusDot, { backgroundColor: COLORS.terminal_green }]} />
           </View>
         </View>

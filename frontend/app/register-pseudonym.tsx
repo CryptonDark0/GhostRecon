@@ -23,7 +23,6 @@ export default function RegisterPseudonym() {
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
 
-  // ENSURE CLEAN STATE
   useEffect(() => {
     const forceCleanup = async () => {
       await signOut(auth).catch(() => {});
@@ -57,11 +56,6 @@ export default function RegisterPseudonym() {
   const handleRegister = async () => {
     Keyboard.dismiss();
 
-    // 🛡️ Web Accessibility Fix: Clear focus before starting process
-    if (Platform.OS === 'web' && typeof document !== 'undefined') {
-      if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
-    }
-
     const trimmedAlias = alias.trim();
     const trimmedEmail = email.trim().toLowerCase();
 
@@ -81,25 +75,29 @@ export default function RegisterPseudonym() {
     }
 
     setLoading(true);
+    console.log("[GHOST-PROTOCOL] Initiating Identity Handshake...");
+
     try {
-      // 1. Authenticate FIRST (Required by security rules to query 'users')
+      // 🛡️ STEP 1: AUTHENTICATE FIRST
+      // This establishes the session required by Firestore security rules.
       const userCredential = await createUserWithEmailAndPassword(auth, trimmedEmail, password);
       const user = userCredential.user;
 
       try {
-        // 2. Check Alias Uniqueness while authenticated
+        // 🛡️ STEP 2: CHECK ALIAS UNIQUENESS (Now permitted because we are authenticated)
         const usersRef = collection(db, "users");
         const q = query(usersRef, where("alias_lowercase", "==", trimmedAlias.toLowerCase()));
         const querySnapshot = await getDocs(q);
 
         if (!querySnapshot.empty) {
+          // ALIAS TAKEN: Rollback Auth account instantly
           await deleteUser(user);
           setLoading(false);
-          showAlert('Alias Taken', 'This tactical alias is already assigned.');
+          showAlert('Alias Taken', 'This tactical alias is already assigned to another agent.');
           return;
         }
 
-        // 3. Handshake & Profile creation
+        // 🛡️ STEP 3: INITIALIZE SECURE NODE
         await sendEmailVerification(user);
         const keyPair = await getOrCreateKeyPair();
 
@@ -116,14 +114,15 @@ export default function RegisterPseudonym() {
           isSubscribed: false
         });
 
-        // 4. Cleanup session until verification
+        // 🛡️ STEP 4: SECURE LOGOUT
         await signOut(auth);
         await clearToken();
         setLoading(false);
-        showAlert('VERIFICATION SENT', 'Handshake link dispatched to Gmail. You MUST verify before signing in.');
+        showAlert('HANDSHAKE PENDING', 'Verification link dispatched to Gmail. You MUST verify your email before signing in.');
         router.replace('/');
 
       } catch (innerErr: any) {
+        console.error("[GHOST-PROTOCOL] Rollback triggered:", innerErr);
         await deleteUser(user).catch(() => {});
         throw innerErr;
       }

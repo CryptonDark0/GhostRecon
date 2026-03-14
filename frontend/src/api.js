@@ -46,37 +46,35 @@ export async function destroyIdentity() {
   const uid = user.uid;
 
   try {
-    console.log("[GHOST-WIPE] Initiating atomic purge for UID:", uid);
+    console.log("[GHOST-WIPE] Initiating identity termination for UID:", uid);
 
-    // 1. DELETE FIRESTORE PROFILE FIRST ⚡
-    // This MUST happen while auth is still active to have permissions.
-    // This releases the 'alias_lowercase' so someone else can take it.
+    // 1. Delete Firestore Profile FIRST ⚡
+    // This releases the 'alias_lowercase' immediately so it can be reused.
     const userDocRef = doc(db, "users", uid);
     await deleteDoc(userDocRef);
-    console.log("[GHOST-WIPE] Firestore profile erased. Alias released.");
+    console.log("[GHOST-WIPE] Firestore document erased. Alias released.");
 
-    // 2. DELETE AUTH ACCOUNT
+    // 2. Delete Firebase Auth User
     try {
       await deleteUser(user);
       console.log("[GHOST-WIPE] Auth identity terminated.");
     } catch (authErr) {
       if (authErr.code === 'auth/requires-recent-login') {
-        // Doc is gone, but user needs to re-auth to finish.
-        // We log them out so they must sign back in to clear the Auth account.
+        // Doc is gone, but user needs to re-auth to finish. Log out to reset.
         await signOut(auth);
         await clearToken();
-        throw new Error("SENSITIVE ACTION: Final authorization required. Please sign out and sign back in one last time to complete the purge.");
+        throw new Error("SENSITIVE ACTION: Final authorization required. Sign out and back in to finalize.");
       }
       throw authErr;
     }
 
-    // 3. WIPE ALL LOCAL CACHE
+    // 3. Clear all local device data
     await clearToken();
-    await AsyncStorage.clear(); // Complete device wipe
+    await AsyncStorage.clear();
 
     return true;
   } catch (e) {
-    console.error("[GHOST-WIPE] Fatal Failure:", e);
+    console.error("[GHOST-WIPE] Purge failed:", e);
     throw e;
   }
 }
