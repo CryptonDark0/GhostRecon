@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity, SafeAreaView,
-  FlatList, TextInput, ActivityIndicator, Alert,
+  FlatList, TextInput, ActivityIndicator, Alert, Platform
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { ChevronLeft, Search, Users, ShieldCheck, Check } from 'lucide-react-native';
@@ -22,7 +22,7 @@ export default function NewGroupScreen() {
 
   const searchUsers = async (text: string) => {
     setSearchQuery(text);
-    if (text.length < 3) {
+    if (text.trim().length < 2) {
       setResults([]);
       return;
     }
@@ -30,11 +30,12 @@ export default function NewGroupScreen() {
     setLoading(true);
     try {
       const usersRef = collection(db, "users");
+      const searchKey = text.trim().toLowerCase();
       const q = query(
         usersRef,
-        where("alias_lowercase", ">=", text.toLowerCase()),
-        where("alias_lowercase", "<=", text.toLowerCase() + '\uf8ff'),
-        limit(10)
+        where("alias_lowercase", ">=", searchKey),
+        where("alias_lowercase", "<=", searchKey + '\uf8ff'),
+        limit(15)
       );
 
       const querySnapshot = await getDocs(q);
@@ -44,7 +45,7 @@ export default function NewGroupScreen() {
 
       setResults(users);
     } catch (err) {
-      console.error("Search error:", err);
+      console.error("[GHOST-SEARCH] Error:", err);
     } finally {
       setLoading(false);
     }
@@ -60,7 +61,7 @@ export default function NewGroupScreen() {
 
   const startGroupChat = async () => {
     if (!currentUser || selectedAgents.length < 1 || !groupName.trim()) {
-      Alert.alert("Required", "Group name and at least one agent are required.");
+      Alert.alert("Required", "Tactical designation and at least one agent required.");
       return;
     }
 
@@ -70,9 +71,19 @@ export default function NewGroupScreen() {
       const conv = await createConversation(participantIds, groupName.trim(), true);
       router.replace(`/chat/${conv.id}`);
     } catch (err: any) {
-      Alert.alert('Error', "Failed to initialize tactical group.");
+      console.error("[GHOST-GROUP] Handshake failed:", err);
+      Alert.alert('Link Error', "Failed to initialize tactical group.");
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleBack = () => {
+    // 🛡️ Safe Back Handshake: Forces return to home if stack is empty
+    if (router.canGoBack()) {
+      router.back();
+    } else {
+      router.replace('/home');
     }
   };
 
@@ -82,6 +93,7 @@ export default function NewGroupScreen() {
       <TouchableOpacity
         style={[styles.userItem, isSelected && styles.userItemSelected]}
         onPress={() => toggleSelectAgent(item)}
+        activeOpacity={0.7}
       >
         <View style={styles.avatar}>
           <Text style={styles.avatarText}>{(item.alias || '?')[0].toUpperCase()}</Text>
@@ -98,52 +110,63 @@ export default function NewGroupScreen() {
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.headerBtn}>
+        <TouchableOpacity onPress={handleBack} style={styles.headerBtn}>
           <ChevronLeft size={24} color={COLORS.ghost_white} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>INITIALIZE GROUP</Text>
-        <TouchableOpacity onPress={startGroupChat} disabled={selectedAgents.length === 0 || !groupName}>
-          <ShieldCheck size={24} color={selectedAgents.length > 0 && groupName ? COLORS.terminal_green : COLORS.stealth_grey} />
+        <TouchableOpacity onPress={startGroupChat} disabled={selectedAgents.length === 0 || !groupName || loading}>
+          {loading ? (
+            <ActivityIndicator size="small" color={COLORS.terminal_green} />
+          ) : (
+            <ShieldCheck size={24} color={selectedAgents.length > 0 && groupName ? COLORS.terminal_green : COLORS.stealth_grey} />
+          )}
         </TouchableOpacity>
       </View>
 
       <View style={styles.nameSection}>
         <Text style={styles.label}>TACTICAL GROUP DESIGNATION</Text>
         <TextInput
+          id="group-name-input"
+          name="groupName"
           style={styles.nameInput}
           value={groupName}
           onChangeText={setGroupName}
           placeholder="e.g. Task_Force_X"
           placeholderTextColor={COLORS.stealth_grey}
           autoCapitalize="none"
+          autoCorrect={false}
         />
       </View>
 
       <View style={styles.searchBox}>
-        <Search size={16} color={COLORS.stealth_grey} />
+        <Search size={18} color={COLORS.stealth_grey} />
         <TextInput
+          id="group-search-input"
+          name="agentSearch"
           style={styles.searchInput}
           value={searchQuery}
           onChangeText={searchUsers}
           placeholder="Search agents to add..."
           placeholderTextColor={COLORS.stealth_grey}
           autoCapitalize="none"
+          autoCorrect={false}
         />
       </View>
 
-      {loading && <ActivityIndicator color={COLORS.terminal_green} style={{ marginTop: 20 }} />}
+      {loading && !searchQuery && <ActivityIndicator color={COLORS.terminal_green} style={{ marginTop: 20 }} />}
 
       <Text style={styles.sectionLabel}>
-        {selectedAgents.length > 0 ? `SELECTED AGENTS (${selectedAgents.length})` : "SEARCH RESULTS"}
+        {selectedAgents.length > 0 && searchQuery.length < 2 ? `SELECTED AGENTS (${selectedAgents.length})` : "IDENTIFIED AGENTS"}
       </Text>
 
       <FlatList
-        data={searchQuery.length < 3 ? selectedAgents : results}
+        data={searchQuery.length < 2 ? selectedAgents : results}
         renderItem={renderUser}
         keyExtractor={(item) => item.id}
+        contentContainerStyle={{ paddingBottom: 40 }}
         ListEmptyComponent={
           <Text style={styles.emptyText}>
-            {searchQuery.length < 3 ? "Select agents from your trust network." : "No agents found."}
+            {searchQuery.length < 2 ? "Select agents from the secure network." : "No agents found in range."}
           </Text>
         }
       />
@@ -158,16 +181,16 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16, paddingVertical: 16,
     borderBottomWidth: 1, borderBottomColor: COLORS.armour_grey,
   },
-  headerBtn: { padding: 4 },
-  headerTitle: { color: COLORS.ghost_white, fontSize: 14, fontWeight: '700', fontFamily: 'monospace', letterSpacing: 2 },
-  nameSection: { padding: 16, backgroundColor: COLORS.gunmetal, borderBottomWidth: 1, borderBottomColor: COLORS.armour_grey },
+  headerBtn: { padding: 8 },
+  headerTitle: { color: COLORS.ghost_white, fontSize: 13, fontWeight: '700', fontFamily: 'monospace', letterSpacing: 2 },
+  nameSection: { padding: 20, backgroundColor: COLORS.gunmetal, borderBottomWidth: 1, borderBottomColor: COLORS.armour_grey },
   label: { color: COLORS.terminal_green, fontSize: 9, fontWeight: '700', fontFamily: 'monospace', marginBottom: 8 },
-  nameInput: { color: COLORS.ghost_white, fontSize: 16, fontFamily: 'monospace', fontWeight: '700' },
+  nameInput: { color: COLORS.ghost_white, fontSize: 16, fontFamily: 'monospace', fontWeight: '700', borderBottomWidth: 1, borderBottomColor: COLORS.border_subtle, paddingVertical: 8 },
   searchBox: {
-    flexDirection: 'row', alignItems: 'center', gap: 8,
+    flexDirection: 'row', alignItems: 'center', gap: 10,
     margin: 16, backgroundColor: COLORS.gunmetal,
     borderWidth: 1, borderColor: COLORS.border_subtle, borderRadius: 2,
-    paddingHorizontal: 12, height: 48,
+    paddingHorizontal: 16, height: 52,
   },
   searchInput: { flex: 1, color: COLORS.ghost_white, fontSize: 14, fontFamily: 'monospace' },
   sectionLabel: {
@@ -176,19 +199,19 @@ const styles = StyleSheet.create({
   },
   userItem: {
     flexDirection: 'row', alignItems: 'center',
-    paddingHorizontal: 16, paddingVertical: 14,
+    paddingHorizontal: 16, paddingVertical: 16,
     borderBottomWidth: 1, borderBottomColor: COLORS.armour_grey,
-    gap: 12,
+    gap: 16,
   },
-  userItemSelected: { backgroundColor: 'rgba(0,255,65,0.03)' },
+  userItemSelected: { backgroundColor: 'rgba(0,255,65,0.05)' },
   avatar: {
-    width: 44, height: 44, borderRadius: 22,
+    width: 48, height: 48, borderRadius: 24,
     backgroundColor: COLORS.gunmetal, borderWidth: 1, borderColor: COLORS.terminal_green,
     alignItems: 'center', justifyContent: 'center',
   },
-  avatarText: { color: COLORS.terminal_green, fontSize: 16, fontWeight: '700', fontFamily: 'monospace' },
+  avatarText: { color: COLORS.terminal_green, fontSize: 18, fontWeight: '700', fontFamily: 'monospace' },
   userInfo: { flex: 1 },
-  userName: { color: COLORS.ghost_white, fontSize: 14, fontWeight: '600', fontFamily: 'monospace' },
-  userType: { color: COLORS.muted_text, fontSize: 10, fontFamily: 'monospace', letterSpacing: 1, marginTop: 2 },
-  emptyText: { color: COLORS.stealth_grey, fontSize: 12, fontFamily: 'monospace', textAlign: 'center', marginTop: 40 },
+  userName: { color: COLORS.ghost_white, fontSize: 15, fontWeight: '600', fontFamily: 'monospace' },
+  userType: { color: COLORS.muted_text, fontSize: 9, fontFamily: 'monospace', marginTop: 4 },
+  emptyText: { color: COLORS.stealth_grey, fontSize: 12, fontFamily: 'monospace', textAlign: 'center', marginTop: 60 },
 });
