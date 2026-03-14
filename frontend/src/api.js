@@ -31,6 +31,7 @@ export async function clearToken() {
   try {
     await AsyncStorage.removeItem("ghost_recon_token");
     await AsyncStorage.removeItem(PROFILE_CACHE_KEY);
+    await AsyncStorage.removeItem('ghostrecon_privacy_settings');
   } catch (e) {}
 }
 
@@ -45,34 +46,37 @@ export async function destroyIdentity() {
   const uid = user.uid;
 
   try {
-    console.log("[GHOST-WIPE] Initiating identity termination for UID:", uid);
+    console.log("[GHOST-WIPE] Initiating atomic purge for UID:", uid);
 
-    // 1. Delete Firestore Profile FIRST (while we have auth permissions)
-    // This releases the alias for others.
+    // 1. DELETE FIRESTORE PROFILE FIRST ⚡
+    // This MUST happen while auth is still active to have permissions.
+    // This releases the 'alias_lowercase' so someone else can take it.
     const userDocRef = doc(db, "users", uid);
     await deleteDoc(userDocRef);
-    console.log("[GHOST-WIPE] Firestore document erased.");
+    console.log("[GHOST-WIPE] Firestore profile erased. Alias released.");
 
-    // 2. Delete Firebase Auth User
+    // 2. DELETE AUTH ACCOUNT
     try {
       await deleteUser(user);
       console.log("[GHOST-WIPE] Auth identity terminated.");
     } catch (authErr) {
       if (authErr.code === 'auth/requires-recent-login') {
-        // Doc is already deleted, but Auth remains. Force logout so they must re-login.
+        // Doc is gone, but user needs to re-auth to finish.
+        // We log them out so they must sign back in to clear the Auth account.
         await signOut(auth);
         await clearToken();
-        throw new Error("SENSITIVE ACTION: Security token expired. Please sign in again to finalize account deletion.");
+        throw new Error("SENSITIVE ACTION: Final authorization required. Please sign out and sign back in one last time to complete the purge.");
       }
       throw authErr;
     }
 
-    // 3. Clear local storage
+    // 3. WIPE ALL LOCAL CACHE
     await clearToken();
+    await AsyncStorage.clear(); // Complete device wipe
 
     return true;
   } catch (e) {
-    console.error("[GHOST-WIPE] Purge failed:", e);
+    console.error("[GHOST-WIPE] Fatal Failure:", e);
     throw e;
   }
 }

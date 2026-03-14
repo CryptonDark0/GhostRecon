@@ -7,7 +7,7 @@ import { COLORS } from "../src/constants";
 import { clearToken, destroyIdentity } from "../src/api";
 import { auth, db } from "../src/firebase";
 import { doc, onSnapshot, updateDoc, serverTimestamp, collection, query, where, orderBy, deleteDoc } from "firebase/firestore";
-import { Shield, MessageSquare, Power, Lock, Users, ChevronRight, Crown, LogOut } from "lucide-react-native";
+import { Shield, MessageSquare, Power, Users, ChevronRight, LogOut } from "lucide-react-native";
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const PROFILE_CACHE_KEY = 'ghostrecon_user_profile';
@@ -43,13 +43,11 @@ export default function HomeScreen() {
     let unsubscribeProfile: () => void;
     let unsubscribeConvs: () => void;
 
-    // ⚡ INSTANT IDENTITY LOCK
     const initSession = async () => {
       try {
         const cached = await AsyncStorage.getItem(PROFILE_CACHE_KEY);
         if (cached) {
-          const parsed = JSON.parse(cached);
-          setUserProfile(parsed);
+          setUserProfile(JSON.parse(cached));
           setLoading(false);
         }
       } catch (e) {}
@@ -68,7 +66,6 @@ export default function HomeScreen() {
           }
           setLoading(false);
         }, (err) => {
-          console.error("Profile handshake failed:", err);
           setLoading(false);
         });
 
@@ -99,8 +96,6 @@ export default function HomeScreen() {
     };
   }, []);
 
-  const handleOpenVault = () => userProfile?.isSubscribed ? router.push('/vault') : router.push('/subscription');
-
   if (loading && !userProfile) {
     return (
       <View style={styles.loadingContainer}>
@@ -117,7 +112,6 @@ export default function HomeScreen() {
           <Text style={styles.headerLabel}>OPERATOR</Text>
           <View style={styles.nameRow}>
             <Text style={styles.codename}>{userProfile?.alias?.toUpperCase() || "AGENT_PENDING"}</Text>
-            {userProfile?.isSubscribed && <Crown size={14} color={COLORS.alert_amber} style={{ marginLeft: 4 }} />}
             <View style={[styles.statusDot, { backgroundColor: COLORS.terminal_green }]} />
           </View>
         </View>
@@ -145,17 +139,12 @@ export default function HomeScreen() {
         ListHeaderComponent={
           <View style={styles.actionGrid}>
             <TouchableOpacity style={styles.gridItem} onPress={() => router.replace('/new-chat')}>
-              <MessageSquare size={24} color={COLORS.terminal_green} />
-              <Text style={styles.gridLabel}>CHAT</Text>
+              <MessageSquare size={28} color={COLORS.terminal_green} />
+              <Text style={styles.gridLabel}>NEW CHAT</Text>
             </TouchableOpacity>
             <TouchableOpacity style={styles.gridItem} onPress={() => router.replace('/new-group')}>
-              <Users size={24} color={COLORS.terminal_green} />
-              <Text style={styles.gridLabel}>GROUP</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.gridItem} onPress={handleOpenVault}>
-              <Lock size={24} color={userProfile?.isSubscribed ? COLORS.terminal_green : COLORS.stealth_grey} />
-              <Text style={[styles.gridLabel, !userProfile?.isSubscribed && { color: COLORS.stealth_grey }]}>VAULT</Text>
-              {!userProfile?.isSubscribed && <Crown size={10} color={COLORS.alert_amber} style={{ position: 'absolute', top: 8, right: 8 }} />}
+              <Users size={28} color={COLORS.terminal_green} />
+              <Text style={styles.gridLabel}>NEW GROUP</Text>
             </TouchableOpacity>
           </View>
         }
@@ -187,9 +176,9 @@ const styles = StyleSheet.create({
   statusDot: { width: 8, height: 8, borderRadius: 4, marginLeft: 4 },
   profileBtn: { width: 44, height: 44, borderRadius: 22, borderWidth: 1, borderColor: COLORS.terminal_green, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(0,255,65,0.05)' },
   content: { padding: 24 },
-  actionGrid: { flexDirection: 'row', gap: 12, marginBottom: 32 },
-  gridItem: { flex: 1, height: 80, backgroundColor: COLORS.gunmetal, borderRadius: 4, alignItems: 'center', justifyContent: 'center', gap: 8, borderWidth: 1, borderColor: COLORS.border_subtle, position: 'relative' },
-  gridLabel: { color: COLORS.ghost_white, fontSize: 9, fontWeight: '700', fontFamily: "monospace" },
+  actionGrid: { flexDirection: 'row', gap: 16, marginBottom: 32 },
+  gridItem: { flex: 1, height: 100, backgroundColor: COLORS.gunmetal, borderRadius: 4, alignItems: 'center', justifyContent: 'center', gap: 10, borderWidth: 1, borderColor: COLORS.border_subtle },
+  gridLabel: { color: COLORS.ghost_white, fontSize: 10, fontWeight: '700', fontFamily: "monospace", letterSpacing: 1 },
   sectionTitle: { color: COLORS.terminal_green, fontSize: 10, fontWeight: '700', fontFamily: "monospace", letterSpacing: 2, marginBottom: 16, marginTop: 12 },
   convWrapper: { flexDirection: 'row', alignItems: 'center', marginBottom: 12 },
   convItem: { flex: 1, flexDirection: 'row', alignItems: 'center', padding: 16, backgroundColor: COLORS.gunmetal, borderRadius: 4, borderWidth: 1, borderColor: COLORS.border_subtle },
