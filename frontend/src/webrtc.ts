@@ -9,6 +9,7 @@ import {
   getDoc,
   serverTimestamp
 } from "firebase/firestore";
+import { Platform } from 'react-native';
 
 // WebRTC configuration
 let peerConnection: any = null;
@@ -25,12 +26,22 @@ const rtcConfig = {
   iceCandidatePoolSize: 10,
 };
 
-const getRTC = async () => {
-  try {
-    return await import('react-native-webrtc');
-  } catch (e) {
-    console.warn("WebRTC not available in this environment.");
-    return null;
+// Tactical helper to get the correct RTC provider
+const getRTCProvider = () => {
+  if (Platform.OS === 'web') {
+    return {
+      RTCPeerConnection: window.RTCPeerConnection,
+      RTCSessionDescription: window.RTCSessionDescription,
+      RTCIceCandidate: window.RTCIceCandidate,
+      mediaDevices: navigator.mediaDevices,
+    };
+  } else {
+    try {
+      return require('react-native-webrtc');
+    } catch (e) {
+      console.warn("Native WebRTC module not found.");
+      return null;
+    }
   }
 };
 
@@ -39,27 +50,32 @@ export const setOnRemoteStreamUpdate = (callback: (stream: any) => void) => {
 };
 
 export async function startLocalStream(isVideo: boolean) {
-  const rtc = await getRTC();
-  if (!rtc) return null;
+  const provider = getRTCProvider();
+  if (!provider) return null;
 
   const constraints = {
     audio: true,
     video: isVideo ? { facingMode: 'user' } : false,
   };
 
-  localStream = await rtc.mediaDevices.getUserMedia(constraints);
-  return localStream;
+  try {
+    localStream = await provider.mediaDevices.getUserMedia(constraints);
+    return localStream;
+  } catch (err) {
+    console.error("Failed to get local stream", err);
+    return null;
+  }
 }
 
 export async function createCall(targetUserId: string, callerId: string, isVideo: boolean) {
-  const rtc = await getRTC();
-  if (!rtc) return null;
+  const provider = getRTCProvider();
+  if (!provider) return null;
 
   const callDoc = doc(collection(db, "calls"));
   const offerCandidates = collection(callDoc, "offerCandidates");
   const answerCandidates = collection(callDoc, "answerCandidates");
 
-  peerConnection = new rtc.RTCPeerConnection(rtcConfig);
+  peerConnection = new provider.RTCPeerConnection(rtcConfig);
 
   if (localStream) {
     localStream.getTracks().forEach((track: any) => {
@@ -68,8 +84,9 @@ export async function createCall(targetUserId: string, callerId: string, isVideo
   }
 
   peerConnection.ontrack = (event: any) => {
-    if (event.streams && event.streams[0]) {
-      remoteStream = event.streams[0];
+    const stream = event.streams[0];
+    if (stream) {
+      remoteStream = stream;
       if (onRemoteStreamUpdate) onRemoteStreamUpdate(remoteStream);
     }
   };
@@ -97,7 +114,7 @@ export async function createCall(targetUserId: string, callerId: string, isVideo
   onSnapshot(callDoc, (snapshot) => {
     const data = snapshot.data();
     if (!peerConnection.currentRemoteDescription && data?.answer) {
-      const answerDescription = new rtc.RTCSessionDescription(data.answer);
+      const answerDescription = new provider.RTCSessionDescription(data.answer);
       peerConnection.setRemoteDescription(answerDescription);
     }
   });
@@ -105,7 +122,7 @@ export async function createCall(targetUserId: string, callerId: string, isVideo
   onSnapshot(answerCandidates, (snapshot) => {
     snapshot.docChanges().forEach((change) => {
       if (change.type === "added") {
-        const candidate = new rtc.RTCIceCandidate(change.doc.data());
+        const candidate = new provider.RTCIceCandidate(change.doc.data());
         peerConnection.addIceCandidate(candidate);
       }
     });
@@ -115,14 +132,14 @@ export async function createCall(targetUserId: string, callerId: string, isVideo
 }
 
 export async function joinCall(callId: string) {
-  const rtc = await getRTC();
-  if (!rtc) return;
+  const provider = getRTCProvider();
+  if (!provider) return;
 
   const callDoc = doc(db, "calls", callId);
   const offerCandidates = collection(callDoc, "offerCandidates");
   const answerCandidates = collection(callDoc, "answerCandidates");
 
-  peerConnection = new rtc.RTCPeerConnection(rtcConfig);
+  peerConnection = new provider.RTCPeerConnection(rtcConfig);
 
   if (localStream) {
     localStream.getTracks().forEach((track: any) => {
@@ -131,8 +148,9 @@ export async function joinCall(callId: string) {
   }
 
   peerConnection.ontrack = (event: any) => {
-    if (event.streams && event.streams[0]) {
-      remoteStream = event.streams[0];
+    const stream = event.streams[0];
+    if (stream) {
+      remoteStream = stream;
       if (onRemoteStreamUpdate) onRemoteStreamUpdate(remoteStream);
     }
   };
@@ -147,7 +165,7 @@ export async function joinCall(callId: string) {
   const callData = callSnap.data();
   if (!callData) return;
 
-  await peerConnection.setRemoteDescription(new rtc.RTCSessionDescription(callData.offer));
+  await peerConnection.setRemoteDescription(new provider.RTCSessionDescription(callData.offer));
 
   const answerDescription = await peerConnection.createAnswer();
   await peerConnection.setLocalDescription(answerDescription);
@@ -158,7 +176,7 @@ export async function joinCall(callId: string) {
   onSnapshot(offerCandidates, (snapshot) => {
     snapshot.docChanges().forEach((change) => {
       if (change.type === "added") {
-        peerConnection.addIceCandidate(new rtc.RTCIceCandidate(change.doc.data()));
+        peerConnection.addIceCandidate(new provider.RTCIceCandidate(change.doc.data()));
       }
     });
   });

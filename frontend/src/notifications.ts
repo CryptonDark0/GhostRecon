@@ -1,20 +1,23 @@
 import { Platform } from 'react-native';
 import * as Device from 'expo-device';
-import { apiCall } from './api';
+import { auth, db } from './firebase';
+import { doc, updateDoc } from 'firebase/firestore';
 
-// This file is the entry point for notifications.
-// It uses conditional requires to avoid importing native-only libraries on web.
-
+/**
+ * SECURE PUSH HANDSHAKE
+ * Connects the physical device to the GhostRecon signaling network.
+ */
 export async function registerForPushNotifications(): Promise<string | null> {
+  // 🛡️ Web/Simulator Protocol: Push is handled via browser service workers
   if (Platform.OS === 'web' || !Device.isDevice) {
-    console.log('Push notifications protocol: BYPASSED (Web/Simulator)');
+    console.log('[GHOST-NOTIF] Handshake bypassed (Web/Simulator)');
     return null;
   }
 
   try {
-    // Dynamic require to prevent top-level side-effects on web
     const Notifications = require('expo-notifications');
 
+    // Configure how notifications appear when app is OPEN
     Notifications.setNotificationHandler({
       handleNotification: async () => ({
         shouldShowAlert: true,
@@ -32,63 +35,52 @@ export async function registerForPushNotifications(): Promise<string | null> {
     }
 
     if (finalStatus !== 'granted') {
+      console.warn('[GHOST-NOTIF] Permission denied by agent.');
       return null;
     }
 
+    // Configure OS-level tactical channels (Android)
     if (Platform.OS === 'android') {
-      await Notifications.setNotificationChannelAsync('messages', {
-        name: 'Encrypted Messages',
-        importance: Notifications.AndroidImportance.HIGH,
-        vibrationPattern: [0, 250, 250, 250],
+      await Notifications.setNotificationChannelAsync('calls', {
+        name: 'Secure Call Link',
+        importance: Notifications.AndroidImportance.MAX,
+        vibrationPattern: [0, 500, 250, 500],
         lightColor: '#00FF41',
         sound: 'default',
       });
-      await Notifications.setNotificationChannelAsync('calls', {
-        name: 'Secure Calls',
-        importance: Notifications.AndroidImportance.MAX,
-        vibrationPattern: [0, 500, 250, 500],
-        lightColor: '#FFB000',
-        sound: 'default',
-      });
     }
 
+    // Retrieve unique device token
     const tokenData = await Notifications.getExpoPushTokenAsync({
-      projectId: 'ghostrecon',
+      projectId: 'ghostrecon-9c294', // Matches your Firebase project ID
     });
     const token = tokenData.data;
 
-    if (token) {
-      try {
-        await apiCall('/notifications/register', {
-          method: 'POST',
-          body: JSON.stringify({ push_token: token }),
-        });
-      } catch (err) {
-        console.warn("Failed to register push token with backend", err);
-      }
+    // ⚡ CRITICAL: Link token to User Profile for incoming calls
+    const user = auth.currentUser;
+    if (user && token) {
+      const userRef = doc(db, "users", user.uid);
+      await updateDoc(userRef, {
+        pushToken: token,
+        deviceType: Platform.OS
+      });
+      console.log('[GHOST-NOTIF] Tactical link established.');
     }
+
     return token;
   } catch (err) {
-    console.warn("Error establishing push notification link:", err);
+    console.error("[GHOST-NOTIF] Protocol failure:", err);
     return null;
   }
 }
 
-export async function sendLocalNotification(title: string, body: string, data?: any) {
+export async function sendLocalNotification(title: string, body: string) {
   if (Platform.OS === 'web') return;
-
   try {
     const Notifications = require('expo-notifications');
     await Notifications.scheduleNotificationAsync({
-      content: {
-        title,
-        body,
-        data: data || {},
-        sound: 'default',
-      },
+      content: { title, body, sound: 'default' },
       trigger: null,
     });
-  } catch (err) {
-    console.error("Local notification failed", err);
-  }
+  } catch (err) {}
 }

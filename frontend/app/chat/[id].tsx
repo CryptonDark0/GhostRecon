@@ -134,13 +134,25 @@ export default function ChatDetail() {
     finally { setSendingMedia(false); setUploadProgress(0); }
   };
 
-  const handleCall = async (type: 'voice' | 'video') => {
+  const handleCall = async (callType: 'voice' | 'video') => {
     if (!targetAgent || !id) return;
-    await handleSendMessage('text', null, 0, null); // Dummy trigger for call node if needed
-    router.push(`/call/${type}?target=${targetAgent.uid}`);
+
+    // Log call in chat history
+    try {
+      const userDoc = await getDoc(doc(db, "users", currentUser!.uid));
+      const senderAlias = userDoc.exists() ? userDoc.data().alias : 'Ghost';
+
+      await addDoc(collection(db, "conversations", id, "messages"), {
+        conversation_id: id, sender_id: currentUser!.uid, sender_alias: senderAlias,
+        content: `[INITIATED ${callType.toUpperCase()} CALL]`, type: 'system',
+        created_at: serverTimestamp()
+      });
+    } catch (e) {}
+
+    router.push(`/call/${callType}?target=${targetAgent.uid}`);
   };
 
-  const onMsgAction = async (action: 'everyone' | 'me' | 'react', emoji?: string) => {
+  const handleAction = async (action: 'everyone' | 'me' | 'react', emoji?: string) => {
     if (!selectedMsg || !id || !currentUser) return;
     setMenuVisible(false);
     try {
@@ -157,6 +169,13 @@ export default function ChatDetail() {
   const openNode = (url: string) => {
     if (!url) return;
     Linking.openURL(url).catch(() => Alert.alert("Error", "Could not open link."));
+  };
+
+  const handleBack = () => {
+    if (Platform.OS === 'web' && typeof document !== 'undefined') {
+      if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
+    }
+    router.replace('/home');
   };
 
   const renderMessage = ({ item }: { item: any }) => {
@@ -184,6 +203,8 @@ export default function ChatDetail() {
               <Paperclip size={16} color={isMine ? "#000" : COLORS.terminal_green} />
               <Text style={[styles.fileText, isMine && {color: "#000"}]}>TACTICAL_INTEL.DAT</Text>
             </View>
+          ) : item.type === 'system' ? (
+            <Text style={styles.systemMsg}>{item.content}</Text>
           ) : (
             <Text style={[styles.msgText, isMine && styles.msgTextMine]} selectable={false}>{item.content}</Text>
           )}
@@ -205,7 +226,7 @@ export default function ChatDetail() {
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.replace('/home')} style={styles.headerBtn}><ChevronLeft size={24} color="#FFF" /></TouchableOpacity>
+        <TouchableOpacity onPress={handleBack} style={styles.headerBtn}><ChevronLeft size={24} color="#FFF" /></TouchableOpacity>
         <View style={styles.headerCenter}>
           <View style={styles.nameRow}>
             <View style={[styles.statusIndicatorHeader, { backgroundColor: targetAgent?.isOnline ? COLORS.terminal_green : COLORS.critical_red }]} />
@@ -248,7 +269,7 @@ export default function ChatDetail() {
             onChangeText={(t) => { setInput(t); setTypingStatus(id!, currentUser!.uid, t.length > 0); }}
             placeholder="Type tactical intel..." placeholderTextColor="#444" multiline
           />
-          <TouchableOpacity onPress={() => handleSend()} style={styles.sendBtn}><Send size={20} color="#000" /></TouchableOpacity>
+          <TouchableOpacity onPress={() => handleSendMessage()} style={styles.sendBtn}><Send size={20} color="#000" /></TouchableOpacity>
         </View>
       </KeyboardAvoidingView>
 
@@ -257,12 +278,12 @@ export default function ChatDetail() {
           <View style={styles.menuContent}>
             <View style={styles.reactionRow}>
               {['👍', '❤️', '😮', '😂', '🔥', '🎯'].map(emoji => (
-                <TouchableOpacity key={emoji} onPress={() => onMsgAction('react', emoji)} style={styles.emojiBtn}><Text style={{fontSize: 24}}>{emoji}</Text></TouchableOpacity>
+                <TouchableOpacity key={emoji} onPress={() => handleAction('react', emoji)} style={styles.emojiBtn}><Text style={{fontSize: 24}}>{emoji}</Text></TouchableOpacity>
               ))}
             </View>
-            <TouchableOpacity style={styles.menuItem} onPress={() => onMsgAction('me')}><Trash2 size={18} color="#FFF" /><Text style={styles.menuText}>DELETE FOR ME</Text></TouchableOpacity>
+            <TouchableOpacity style={styles.menuItem} onPress={() => handleAction('me')}><Trash2 size={18} color="#FFF" /><Text style={styles.menuText}>DELETE FOR ME</Text></TouchableOpacity>
             {selectedMsg?.sender_id === currentUser?.uid && (
-              <TouchableOpacity style={[styles.menuItem, {borderTopWidth: 1, borderTopColor: '#222'}]} onPress={() => onMsgAction('everyone')}><ShieldAlert size={18} color={COLORS.critical_red} /><Text style={[styles.menuText, {color: COLORS.critical_red}]}>DELETE FOR EVERYONE</Text></TouchableOpacity>
+              <TouchableOpacity style={[styles.menuItem, {borderTopWidth: 1, borderTopColor: '#222'}]} onPress={() => handleAction('everyone')}><ShieldAlert size={18} color={COLORS.critical_red} /><Text style={[styles.menuText, {color: COLORS.critical_red}]}>DELETE FOR EVERYONE</Text></TouchableOpacity>
             )}
           </View>
         </TouchableOpacity>
@@ -297,6 +318,7 @@ const styles = StyleSheet.create({
   msgImage: { width: 240, height: 240, borderRadius: 2, marginBottom: 8 },
   fileBox: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: 'rgba(0,0,0,0.1)', padding: 10 },
   fileText: { color: COLORS.terminal_green, fontSize: 12, fontFamily: 'monospace' },
+  systemMsg: { color: COLORS.alert_amber, fontSize: 11, fontFamily: 'monospace', fontStyle: 'italic' },
   msgMeta: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 6, justifyContent: 'flex-end' },
   msgTime: { fontSize: 8, color: '#666', fontFamily: 'monospace' },
   progress: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10, padding: 8, backgroundColor: '#121212' },
