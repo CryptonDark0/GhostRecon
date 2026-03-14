@@ -53,14 +53,13 @@ export async function startLocalStream(isVideo: boolean) {
   const provider = getRTCProvider();
   if (!provider) return null;
 
-  // 🛡️ REUSE PROTECTION: Reuse local stream if already active
   if (localStream && localStream.active) {
-    console.log("[GHOST-RTC] Reusing existing local stream.");
+    console.log("[GHOST-RTC] Local stream already active.");
     return localStream;
   }
 
   const constraints = {
-    audio: true,
+    audio: true, // 🎙️ Live mic always requested
     video: isVideo ? {
       facingMode: 'user',
       width: { min: 640, ideal: 1280 },
@@ -72,7 +71,7 @@ export async function startLocalStream(isVideo: boolean) {
     localStream = await provider.mediaDevices.getUserMedia(constraints);
     return localStream;
   } catch (err) {
-    console.error("Failed to get local stream", err);
+    console.error("Failed to capture microphone/camera", err);
     return null;
   }
 }
@@ -87,6 +86,7 @@ export async function createCall(targetUserId: string, callerId: string, isVideo
 
   peerConnection = new provider.RTCPeerConnection(rtcConfig);
 
+  // ⚡ HARDENED: Push local tracks to peer connection
   if (localStream) {
     localStream.getTracks().forEach((track: any) => {
       peerConnection.addTrack(track, localStream);
@@ -94,9 +94,11 @@ export async function createCall(targetUserId: string, callerId: string, isVideo
   }
 
   peerConnection.ontrack = (event: any) => {
+    // 🛡️ MULTI-STREAM PROTECTION
     const stream = event.streams[0];
     if (stream && stream.id !== remoteStream?.id) {
       remoteStream = stream;
+      console.log("[GHOST-RTC] Remote track linked successfully.");
       if (onRemoteStreamUpdate) onRemoteStreamUpdate(remoteStream);
     }
   };
@@ -161,6 +163,7 @@ export async function joinCall(callId: string) {
     const stream = event.streams[0];
     if (stream && stream.id !== remoteStream?.id) {
       remoteStream = stream;
+      console.log("[GHOST-RTC] Handshake acknowledged. Stream active.");
       if (onRemoteStreamUpdate) onRemoteStreamUpdate(remoteStream);
     }
   };
@@ -194,7 +197,10 @@ export async function joinCall(callId: string) {
 
 export function endCall(): void {
   if (localStream) {
-    localStream.getTracks().forEach((track: any) => track.stop());
+    localStream.getTracks().forEach((track: any) => {
+      track.stop();
+      console.log(`[GHOST-RTC] Stopped local track: ${track.kind}`);
+    });
     localStream = null;
   }
   if (peerConnection) {
@@ -203,6 +209,7 @@ export function endCall(): void {
   }
   remoteStream = null;
   onRemoteStreamUpdate = null;
+  console.log("[GHOST-RTC] Connection terminated and hardware released.");
 }
 
 export function getLocalStream() { return localStream; }

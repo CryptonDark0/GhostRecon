@@ -2,12 +2,16 @@ import { Platform } from 'react-native';
 import * as Device from 'expo-device';
 import { auth, db } from './firebase';
 import { doc, setDoc } from 'firebase/firestore';
+import Constants from 'expo-constants';
 
 /**
  * SECURE PUSH HANDSHAKE
  * Connects the physical device to the GhostRecon signaling network.
  */
 export async function registerForPushNotifications(): Promise<string | null> {
+  // 🛡️ Environment Guard: Skip during Node.js build process
+  if (Platform.OS === 'web' && typeof window === 'undefined') return null;
+
   // 🛡️ Tactical Bypass: Physical hardware or Web environment required
   if (!Device.isDevice && Platform.OS !== 'web') {
     console.log('[GHOST-NOTIF] Handshake bypassed (Simulator)');
@@ -15,9 +19,9 @@ export async function registerForPushNotifications(): Promise<string | null> {
   }
 
   try {
+    // Dynamic require to prevent top-level side effects during build
     const Notifications = require('expo-notifications');
 
-    // Configure how notifications appear when app is OPEN
     Notifications.setNotificationHandler({
       handleNotification: async () => ({
         shouldShowAlert: true,
@@ -39,7 +43,6 @@ export async function registerForPushNotifications(): Promise<string | null> {
       return null;
     }
 
-    // Configure OS-level tactical channels (Android)
     if (Platform.OS === 'android') {
       await Notifications.setNotificationChannelAsync('calls', {
         name: 'Secure Call Link',
@@ -50,14 +53,15 @@ export async function registerForPushNotifications(): Promise<string | null> {
       });
     }
 
-    // Retrieve unique device token using VAPID for Web support
+    // Resolve Expo Project ID
+    const projectId = Constants?.expoConfig?.extra?.eas?.projectId ?? Constants?.easConfig?.projectId;
+
     const tokenData = await Notifications.getExpoPushTokenAsync({
-      projectId: 'ghostrecon-9c294',
+      ...(projectId ? { projectId } : {}),
       vapidKey: 'BO9_lB7J1j9iPTwAtn3WQXVTgSZGRLILk21cCjTdNPcPNXFHpJ54lUr315s-QFijAYY6i1AiW9qo_yg0TBWKGYg'
     });
     const token = tokenData.data;
 
-    // ⚡ CRITICAL: Use setDoc with merge to prevent Permission Denied on new users
     const user = auth.currentUser;
     if (user && token) {
       const userRef = doc(db, "users", user.uid);
@@ -77,7 +81,7 @@ export async function registerForPushNotifications(): Promise<string | null> {
 }
 
 export async function sendLocalNotification(title: string, body: string) {
-  if (Platform.OS === 'web') return;
+  if (Platform.OS === 'web' && typeof window === 'undefined') return;
   try {
     const Notifications = require('expo-notifications');
     await Notifications.scheduleNotificationAsync({
