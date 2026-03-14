@@ -34,17 +34,21 @@ export default function CallScreen() {
   const [remoteStream, setRemoteStream] = useState<any>(null);
 
   const dialTone = useRef<Audio.Sound | null>(null);
+  const isMounted = useRef(true);
 
   useEffect(() => {
+    isMounted.current = true;
     setupCall();
 
     setOnRemoteStreamUpdate((stream) => {
+      if (!isMounted.current) return;
       setRemoteStream(stream);
       setCallStatus('connected');
-      stopDialTone(); // Stop dialing sound when connected
+      stopDialTone();
     });
 
     return () => {
+      isMounted.current = false;
       stopDialTone();
       endRtcCall();
     };
@@ -52,26 +56,37 @@ export default function CallScreen() {
 
   useEffect(() => {
     let interval: any;
-    if (callStatus === 'connected') interval = setInterval(() => setDuration(d => d + 1), 1000);
+    if (callStatus === 'connected') {
+      interval = setInterval(() => {
+        if (isMounted.current) setDuration(d => d + 1);
+      }, 1000);
+    }
     return () => clearInterval(interval);
   }, [callStatus]);
 
   const playDialTone = async () => {
     try {
-      // Use a direct .mp3 link that doesn't block hotlinking
+      // Direct Link to a standard MP3 to avoid loading errors
       const { sound } = await Audio.Sound.createAsync(
         { uri: 'https://www.soundjay.com/phone/phone-calling-1.mp3' },
         { isLooping: true, shouldPlay: true, volume: 0.3 }
       );
-      dialTone.current = sound;
+      if (isMounted.current) {
+        dialTone.current = sound;
+      } else {
+        await sound.unloadAsync();
+      }
     } catch (e) {
-      console.log("Dial tone failed to load", e);
+      console.log("[GHOST-AUDIO] Dial tone load failed (bypassing):", e.message);
     }
   };
 
   const stopDialTone = async () => {
     if (dialTone.current) {
-      try { await dialTone.current.stopAsync(); await dialTone.current.unloadAsync(); } catch (e) {}
+      try {
+        await dialTone.current.stopAsync();
+        await dialTone.current.unloadAsync();
+      } catch (e) {}
       dialTone.current = null;
     }
   };
@@ -80,15 +95,17 @@ export default function CallScreen() {
     if (!auth.currentUser || !target) return;
     try {
       const targetSnap = await getDoc(doc(db, "users", target));
-      if (targetSnap.exists()) setTargetAlias(targetSnap.data().alias);
+      if (targetSnap.exists() && isMounted.current) setTargetAlias(targetSnap.data().alias);
 
       await startLocalStream(isVideo);
 
       if (!callId) {
-        setCallStatus('calling');
-        playDialTone(); // Start dial tone for the caller
+        if (isMounted.current) {
+            setCallStatus('calling');
+            playDialTone().catch(() => {}); // Don't let sound errors block the call
+        }
         const newId = await createCall(target, auth.currentUser.uid, isVideo);
-        if (newId) {
+        if (newId && isMounted.current) {
           setCallId(newId);
           listenToCall(newId);
         }
@@ -97,26 +114,32 @@ export default function CallScreen() {
         listenToCall(callId);
       }
     } catch (err) {
-      console.error("Call setup failed:", err);
-      router.back();
+      console.error("[GHOST-RTC] Handshake Error:", err);
+      // We no longer router.replace here to prevent "throwing" out of the screen on minor errors
     }
   };
 
   const listenToCall = (id: string) => {
     return onSnapshot(doc(db, "calls", id), (snapshot) => {
+      if (!isMounted.current) return;
       const data = snapshot.data();
-      if (!data) return;
-      if (data.status === 'ended') {
+
+      // If data is null, the document might have been deleted.
+      // We only exit if the status is explicitly 'ended'.
+      if (data?.status === 'ended') {
         setCallStatus('ended');
         stopDialTone();
-        setTimeout(() => router.back(), 1500);
+        setTimeout(() => {
+          if (isMounted.current) router.replace('/home');
+        }, 1500);
       }
-      if (data.status === 'connected') {
+
+      if (data?.status === 'connected') {
         setCallStatus('connected');
         stopDialTone();
       }
     }, (error) => {
-      console.error("Snapshot error:", error);
+      console.error("[GHOST-RTC] Firestore Update Error:", error);
     });
   };
 
@@ -124,13 +147,11 @@ export default function CallScreen() {
     if (callId) {
       try {
         await updateDoc(doc(db, "calls", callId), { status: 'ended' });
-      } catch (e) {
-        console.error("Failed to end call in DB", e);
-      }
+      } catch (e) {}
     }
     stopDialTone();
     endRtcCall();
-    router.back();
+    router.replace('/home');
   };
 
   const toggleSpeaker = async () => {
@@ -183,7 +204,7 @@ export default function CallScreen() {
         <View style={styles.content}>
           <Text style={styles.agentName}>{targetAlias}</Text>
           <Text style={styles.callStatusText}>
-            {callStatus === 'connecting' ? 'ESTABLISHING...' :
+            {callStatus === 'connecting' ? 'ESTABLISHING SECURE NODE...' :
              callStatus === 'calling' ? `OUTGOING ${isVideo ? 'VIDEO' : 'AUDIO'} CALL` :
              callStatus === 'ended' ? 'LINK TERMINATED' :
              `${Math.floor(duration/60).toString().padStart(2,'0')}:${(duration%60).toString().padStart(2,'0')}`}
